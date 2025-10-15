@@ -881,9 +881,14 @@
             return iso;
         };
 
-        const renderIndicators = (entries) => {
+        const renderIndicators = (entries, serviceDateIso) => {
             const active = entries.find((entry) => entry.status === "active");
-            const next = entries.find((entry) => entry.status === "waiting");
+            const waitingEntries = entries.filter((entry) => entry.status === "waiting");
+            const next = waitingEntries[0];
+            const servedCount = entries.filter((entry) => entry.status === "served").length;
+            const pendingCount = entries.length - servedCount;
+            const waitingCount = waitingEntries.length;
+            const isTodayView = serviceDateIso === todayIso;
 
             if (active) {
                 activeIndicator.querySelector(".ticket").textContent = toPersianDigits(active.ticket_number);
@@ -899,6 +904,23 @@
             } else {
                 nextIndicator.querySelector(".ticket").textContent = "—";
                 nextIndicator.querySelector(".name").textContent = "در انتظار ثبت نوبت";
+            }
+
+            if (countIndicator) {
+                const ticketEl = countIndicator.querySelector(".ticket");
+                const nameEl = countIndicator.querySelector(".name");
+                if (!entries.length) {
+                    ticketEl.textContent = "۰";
+                    nameEl.textContent = "صف خالی است";
+                } else {
+                    ticketEl.textContent = toPersianDigits(pendingCount);
+                    const waitingText = `در صف: ${toPersianDigits(waitingCount)} نفر`;
+                    const servedText = `انجام شده: ${toPersianDigits(servedCount)} نفر`;
+                    nameEl.textContent = `${waitingText} | ${servedText}`;
+                    if (!isTodayView) {
+                        nameEl.textContent += " (نمایش تاریخ دیگر)";
+                    }
+                }
             }
         };
 
@@ -917,7 +939,7 @@
             const isTodayView = serviceDateIso === todayIso;
             if (!entries.length) {
                 queueBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td></tr>';
-                renderIndicators([]);
+                renderIndicators([], serviceDateIso);
                 startDayButton.disabled = false;
                 return;
             }
@@ -926,9 +948,9 @@
                 const badgeClass = `badge ${entry.status}`;
                 const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
                 const statusText = statusLabel(entry.status);
-                const editable = entry.service_date === todayIso;
+                const editable = entry.service_date === serviceDateIso && isTodayView;
                 const actionCell = editable
-                    ? `<button type="button" class="quiet edit-entry" data-entry-id="${entry.id}">ویرایش</button>`
+                    ? `<button type="button" class="edit-entry" data-entry-id="${entry.id}">ویرایش</button>`
                     : "—";
                 return `<tr class="${rowClass}">
                     <td>${toPersianDigits(entry.ticket_number)}</td>
@@ -937,11 +959,11 @@
                     <td>${birthday}</td>
                     <td><span class="${badgeClass}">${statusText}</span></td>
                     <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
-                    <td>${actionCell}</td>
+                    <td class="actions">${actionCell}</td>
                 </tr>`;
             });
             queueBody.innerHTML = rows.join("");
-            renderIndicators(entries);
+            renderIndicators(entries, serviceDateIso);
             startDayButton.disabled = isTodayView && entries.length > 0;
         };
 
