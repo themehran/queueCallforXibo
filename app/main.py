@@ -76,6 +76,26 @@ class QueueEntryCreate(BaseModel):
         raise ValueError("Unsupported birthday value")
 
 
+class QueueEntryUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    birthday: Optional[date] = None
+
+    @field_validator("birthday", mode="before")
+    @classmethod
+    def parse_birthday(cls, value: object) -> Optional[date]:
+        if value in (None, "", "null"):
+            return None
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError("birthday must use YYYY-MM-DD format") from exc
+        raise ValueError("Unsupported birthday value")
+
+
 class QueueEntryRead(BaseModel):
     id: int
     service_date: date
@@ -257,6 +277,41 @@ def create_entry(
         phone=normalized_phone,
         birthday=payload.birthday,
     )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return QueueEntryRead.model_validate(entry)
+
+
+@app.patch("/queue/entries/{entry_id}", response_model=QueueEntryRead)
+def update_entry(
+    entry_id: int, payload: QueueEntryUpdate, session: Session = Depends(get_db_session)
+) -> QueueEntryRead:
+    entry = session.get(QueueEntry, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="نوبت یافت نشد")
+    if entry.service_date != date.today():
+        raise HTTPException(status_code=403, detail="ویرایش فقط برای نوبت‌های امروز مجاز است")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="هیچ فیلدی برای ویرایش ارسال نشده است")
+
+    if "name" in updates:
+        name = (updates["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="نام نمی‌تواند خالی باشد")
+        entry.name = name
+
+    if "phone" in updates:
+        phone_value = (updates["phone"] or "").strip()
+        if not phone_value:
+            raise HTTPException(status_code=400, detail="شماره تماس نمی‌تواند خالی باشد")
+        entry.phone = normalize_phone(phone_value)
+
+    if "birthday" in updates:
+        entry.birthday = updates["birthday"]
+
     session.add(entry)
     session.commit()
     session.refresh(entry)

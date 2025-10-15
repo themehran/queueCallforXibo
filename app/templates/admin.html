@@ -213,6 +213,122 @@
             font-size: 0.95rem;
             color: #475569;
         }
+        .picker-wrapper {
+            position: relative;
+        }
+        .jalali-picker {
+            position: absolute;
+            inset-inline-start: 0;
+            top: calc(100% + 0.5rem);
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.9rem;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.15);
+            width: 18.5rem;
+            padding: 0.75rem 0.85rem 0.9rem;
+            z-index: 50;
+        }
+        .jalali-picker.hidden {
+            display: none;
+        }
+        .jalali-picker .jp-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+        .jalali-picker .jp-title {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+        .jalali-picker button.picker-nav {
+            background: transparent;
+            color: #2563eb;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.5rem;
+            box-shadow: none;
+        }
+        .jalali-picker button.picker-nav:hover {
+            background: rgba(37, 99, 235, 0.12);
+        }
+        .jalali-picker .jp-week,
+        .jalali-picker .jp-days {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.35rem;
+            text-align: center;
+        }
+        .jalali-picker .jp-week {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 0.25rem;
+        }
+        .jalali-picker .jp-day {
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 0.45rem 0;
+            border-radius: 0.55rem;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .jalali-picker .jp-day:hover {
+            background: rgba(37, 99, 235, 0.15);
+        }
+        .jalali-picker .jp-day.disabled {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .jalali-picker .jp-day.selected {
+            background: #2563eb;
+            color: #fff;
+        }
+        .jalali-picker .jp-day.today {
+            border: 1px solid rgba(37, 99, 235, 0.65);
+        }
+        .compact-input {
+            width: 175px;
+            padding: 0.65rem 0.75rem;
+            border-radius: 0.65rem;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            font-size: 0.95rem;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 80;
+        }
+        .modal-backdrop.hidden {
+            display: none;
+        }
+        .modal {
+            background: #fff;
+            border-radius: 1rem;
+            padding: 1.75rem;
+            width: min(420px, calc(100% - 2rem));
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.2);
+        }
+        .modal h3 {
+            margin: 0 0 1rem;
+            font-size: 1.25rem;
+        }
+        .modal .form-group {
+            margin-bottom: 1rem;
+        }
+        .modal .form-group:last-of-type {
+            margin-bottom: 0.5rem;
+        }
+        .modal-actions {
+            margin-top: 1.25rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
         @media (max-width: 720px) {
             main {
                 padding: 1.5rem 1rem 2.5rem;
@@ -244,7 +360,10 @@
                     <button id="start-day">شروع روز جدید</button>
                     <button id="call-next">فراخوانی نفر بعد</button>
                     <button id="call-previous" class="secondary">بازگرداندن نفر قبلی</button>
-                    <button id="previous-report" class="secondary">گزارش روز قبل</button>
+                    <div class="picker-wrapper">
+                        <input type="text" id="report-date" class="compact-input" placeholder="تاریخ گزارش (شمسی)" autocomplete="off">
+                    </div>
+                    <button id="load-report" class="secondary">نمایش گزارش</button>
                     <button id="refresh" class="quiet">به‌روزرسانی لیست</button>
                 </div>
             </div>
@@ -275,7 +394,7 @@
                     <input type="tel" id="phone" name="phone" placeholder="مثال: ۰۹۱۲۱۲۳۴۵۶۷" autocomplete="off" required>
                     <div class="input-hint">پذیرش: +989121234567 ، 09121234567 ، 9121234567</div>
                 </div>
-                <div>
+                <div class="picker-wrapper">
                     <label for="birthday">تاریخ تولد (شمسی)</label>
                     <input type="text" id="birthday" name="birthday" placeholder="مثال: ۱۳۷۵-۰۳-۲۵" autocomplete="off">
                 </div>
@@ -297,11 +416,12 @@
                         <th>تاریخ تولد</th>
                         <th>وضعیت</th>
                         <th>زمان ثبت</th>
+                        <th>عملیات</th>
                     </tr>
                 </thead>
                 <tbody id="queue-body">
                     <tr>
-                        <td colspan="6" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td>
+                        <td colspan="7" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td>
                     </tr>
                 </tbody>
             </table>
@@ -332,6 +452,31 @@
             <div id="previous-report-status" class="status"></div>
         </section>
     </main>
+
+    <div id="edit-modal" class="modal-backdrop hidden">
+        <div class="modal" role="dialog" aria-modal="true">
+            <h3>ویرایش نوبت</h3>
+            <form id="edit-form">
+                <div class="form-group">
+                    <label for="edit-name">نام و نام خانوادگی</label>
+                    <input type="text" id="edit-name" autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-phone">شماره تماس</label>
+                    <input type="tel" id="edit-phone" autocomplete="off" required>
+                </div>
+                <div class="form-group picker-wrapper">
+                    <label for="edit-birthday">تاریخ تولد (شمسی)</label>
+                    <input type="text" id="edit-birthday" placeholder="مثال: ۱۳۷۵-۰۳-۲۵" autocomplete="off">
+                </div>
+                <div id="edit-status" class="status"></div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-edit" class="secondary">انصراف</button>
+                    <button type="submit">ذخیره تغییرات</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         const persianDigits = ["۰","۱","۲","۳","۴","۵","۶","۷","۸","۹"];
@@ -444,11 +589,204 @@
             return new Intl.DateTimeFormat("fa-IR", { hour: "2-digit", minute: "2-digit" }).format(date);
         };
 
+        const jalaliMonthNames = [
+            "فروردین",
+            "اردیبهشت",
+            "خرداد",
+            "تیر",
+            "مرداد",
+            "شهریور",
+            "مهر",
+            "آبان",
+            "آذر",
+            "دی",
+            "بهمن",
+            "اسفند",
+        ];
+        const jalaliWeekDays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
+
+        const normalizeJalaliDigits = (value) => normalizeDigits(value ?? "").replace(/[./]/g, "-");
+
+        const parseJalaliString = (value) => {
+            const normalized = normalizeJalaliDigits(value);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+                return null;
+            }
+            return normalized.split("-").map(Number);
+        };
+
+        const isJalaliLeapYear = (jy) => {
+            const mod = ((jy - (jy > 0 ? 474 : 473)) % 2820) + 2820;
+            return ((mod + 38) * 682) % 2816 < 682;
+        };
+
+        const jalaliMonthLength = (jy, jm) => {
+            if (jm >= 1 && jm <= 6) return 31;
+            if (jm >= 7 && jm <= 11) return 30;
+            return isJalaliLeapYear(jy) ? 30 : 29;
+        };
+
+        const attachJalaliPicker = (input, { onSelect } = {}) => {
+            if (!input) return;
+            if (input.dataset.pickerAttached === "true") return;
+            input.dataset.pickerAttached = "true";
+
+            const wrapper = input.closest(".picker-wrapper") || input.parentElement;
+            if (!wrapper) return;
+            wrapper.classList.add("picker-wrapper");
+
+            const picker = document.createElement("div");
+            picker.className = "jalali-picker hidden";
+
+            const header = document.createElement("div");
+            header.className = "jp-header";
+
+            const prevButton = document.createElement("button");
+            prevButton.type = "button";
+            prevButton.className = "picker-nav";
+            prevButton.textContent = "‹";
+
+            const title = document.createElement("div");
+            title.className = "jp-title";
+
+            const nextButton = document.createElement("button");
+            nextButton.type = "button";
+            nextButton.className = "picker-nav";
+            nextButton.textContent = "›";
+
+            header.append(prevButton, title, nextButton);
+
+            const weekRow = document.createElement("div");
+            weekRow.className = "jp-week";
+            jalaliWeekDays.forEach((day) => {
+                const span = document.createElement("span");
+                span.textContent = day;
+                weekRow.appendChild(span);
+            });
+
+            const daysGrid = document.createElement("div");
+            daysGrid.className = "jp-days";
+
+            picker.append(header, weekRow, daysGrid);
+            wrapper.appendChild(picker);
+
+            let [selectedJy, selectedJm, selectedJd] = (() => {
+                const parsed = parseJalaliString(input.value);
+                if (parsed) return parsed;
+                const jalaliToday = isoToJalali(todayIso);
+                return jalaliToday ? jalaliToday.split("-").map(Number) : [1403, 1, 1];
+            })();
+            let currentJy = selectedJy;
+            let currentJm = selectedJm;
+
+            const updateTitle = () => {
+                title.textContent = `${toPersianDigits(currentJy)} ${jalaliMonthNames[currentJm - 1]}`;
+            };
+
+            const renderDays = () => {
+                daysGrid.innerHTML = "";
+                const monthLength = jalaliMonthLength(currentJy, currentJm);
+                const [gYear, gMonth, gDay] = jalaliToGregorian(currentJy, currentJm, 1);
+                const firstWeekDay = (new Date(Date.UTC(gYear, gMonth - 1, gDay)).getUTCDay() + 1) % 7;
+
+                for (let i = 0; i < firstWeekDay; i += 1) {
+                    const filler = document.createElement("div");
+                    filler.className = "jp-day disabled";
+                    daysGrid.appendChild(filler);
+                }
+
+                for (let day = 1; day <= monthLength; day += 1) {
+                    const cell = document.createElement("div");
+                    cell.className = "jp-day";
+                    cell.textContent = toPersianDigits(day);
+                    if (selectedJy === currentJy && selectedJm === currentJm && selectedJd === day) {
+                        cell.classList.add("selected");
+                    }
+                    const jalaliToday = isoToJalali(todayIso);
+                    if (jalaliToday) {
+                        const [ty, tm, td] = jalaliToday.split("-").map(Number);
+                        if (ty === currentJy && tm === currentJm && td === day) {
+                            cell.classList.add("today");
+                        }
+                    }
+                    cell.addEventListener("click", () => {
+                        selectedJy = currentJy;
+                        selectedJm = currentJm;
+                        selectedJd = day;
+                        const jalaliString = `${selectedJy}-${pad(selectedJm)}-${pad(selectedJd)}`;
+                        input.value = toPersianDigits(jalaliString);
+                        if (typeof onSelect === "function") {
+                            const iso = jalaliToIso(jalaliString);
+                            onSelect({ jalali: jalaliString, iso });
+                        }
+                        hidePicker();
+                    });
+                    daysGrid.appendChild(cell);
+                }
+            };
+
+            const showPicker = () => {
+                const parsed = parseJalaliString(input.value);
+                if (parsed) {
+                    [selectedJy, selectedJm, selectedJd] = parsed;
+                    currentJy = selectedJy;
+                    currentJm = selectedJm;
+                }
+                updateTitle();
+                renderDays();
+                picker.classList.remove("hidden");
+            };
+
+            const hidePicker = () => {
+                picker.classList.add("hidden");
+            };
+
+            prevButton.addEventListener("click", () => {
+                currentJm -= 1;
+                if (currentJm < 1) {
+                    currentJm = 12;
+                    currentJy -= 1;
+                }
+                updateTitle();
+                renderDays();
+            });
+
+            nextButton.addEventListener("click", () => {
+                currentJm += 1;
+                if (currentJm > 12) {
+                    currentJm = 1;
+                    currentJy += 1;
+                }
+                updateTitle();
+                renderDays();
+            });
+
+            const handleDocumentClick = (event) => {
+                if (picker.classList.contains("hidden")) {
+                    return;
+                }
+                if (picker.contains(event.target) || wrapper.contains(event.target)) {
+                    return;
+                }
+                hidePicker();
+            };
+
+            document.addEventListener("mousedown", handleDocumentClick);
+            input.addEventListener("focus", showPicker);
+            input.addEventListener("click", showPicker);
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") {
+                    hidePicker();
+                }
+            });
+        };
+
         const serviceDateInput = document.getElementById("service-date");
         const startDayButton = document.getElementById("start-day");
         const callNextButton = document.getElementById("call-next");
         const callPreviousButton = document.getElementById("call-previous");
-        const previousReportButton = document.getElementById("previous-report");
+        const reportDateInput = document.getElementById("report-date");
+        const loadReportButton = document.getElementById("load-report");
         const refreshButton = document.getElementById("refresh");
         const dayStatus = document.getElementById("day-status");
         const entryForm = document.getElementById("entry-form");
@@ -461,6 +799,13 @@
         const reportBody = document.getElementById("previous-report-body");
         const reportStatus = document.getElementById("previous-report-status");
         const reportDateLabel = document.getElementById("previous-report-date");
+        const editModal = document.getElementById("edit-modal");
+        const editForm = document.getElementById("edit-form");
+        const editNameInput = document.getElementById("edit-name");
+        const editPhoneInput = document.getElementById("edit-phone");
+        const editBirthdayInput = document.getElementById("edit-birthday");
+        const editStatus = document.getElementById("edit-status");
+        const cancelEditButton = document.getElementById("cancel-edit");
 
         const todayIso = new Date().toISOString().slice(0, 10);
         const todayJalali = isoToJalali(todayIso);
