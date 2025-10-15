@@ -343,9 +343,31 @@ def display_payload(
         .where(QueueEntry.service_date == service_day)
         .order_by(QueueEntry.ticket_index.asc())
     ).all()
+    active_entry = next((entry for entry in entries if entry.status == "active"), None)
+    next_entry = next((entry for entry in entries if entry.status == "waiting"), None)
     return {
         "service_date": service_day.isoformat(),
         "count": len(entries),
+        "active": (
+            {
+                "ticket": active_entry.ticket_number,
+                "name": active_entry.name,
+                "phone": active_entry.phone,
+                "birthday": active_entry.birthday.isoformat() if active_entry.birthday else None,
+            }
+            if active_entry
+            else None
+        ),
+        "next": (
+            {
+                "ticket": next_entry.ticket_number,
+                "name": next_entry.name,
+                "phone": next_entry.phone,
+                "birthday": next_entry.birthday.isoformat() if next_entry.birthday else None,
+            }
+            if next_entry
+            else None
+        ),
         "queue": [
             {
                 "ticket": entry.ticket_number,
