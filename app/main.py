@@ -5,8 +5,8 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, statu
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, field_validator
-from sqlalchemy import delete, func, select
-from sqlmodel import Session
+from sqlalchemy import delete, func
+from sqlmodel import Session, select
 
 from .database import get_session, init_db
 from .models import QueueDay, QueueEntry
@@ -139,7 +139,7 @@ def create_entry(
     max_index = session.exec(
         select(func.max(QueueEntry.ticket_index)).where(QueueEntry.service_date == service_date)
     ).one()
-    current_index = max_index[0] or 0
+    current_index = max_index or 0
     next_index = current_index + 1
     if next_index > 999:
         raise HTTPException(status_code=400, detail="Queue number limit reached for the day")
