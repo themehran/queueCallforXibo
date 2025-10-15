@@ -589,6 +589,22 @@
             return new Intl.DateTimeFormat("fa-IR", { hour: "2-digit", minute: "2-digit" }).format(date);
         };
 
+        function getPreviousDayIso(isoDate) {
+            if (!isoDate) {
+                return null;
+            }
+            const [gy, gm, gd] = isoDate.split("-").map(Number);
+            if ([gy, gm, gd].some(Number.isNaN)) {
+                return null;
+            }
+            const date = new Date(Date.UTC(gy, gm - 1, gd));
+            date.setUTCDate(date.getUTCDate() - 1);
+            const prevYear = date.getUTCFullYear();
+            const prevMonth = pad(date.getUTCMonth() + 1);
+            const prevDay = pad(date.getUTCDate());
+            return `${prevYear}-${prevMonth}-${prevDay}`;
+        }
+
         const jalaliMonthNames = [
             "فروردین",
             "اردیبهشت",
@@ -863,19 +879,6 @@
                 setStatus(dayStatus, "تاریخ خدمت معتبر نیست.", "error");
             }
             return iso;
-        };
-
-        const getPreviousDayIso = (isoDate) => {
-            const [gy, gm, gd] = isoDate.split("-").map(Number);
-            if ([gy, gm, gd].some(Number.isNaN)) {
-                return null;
-            }
-            const date = new Date(Date.UTC(gy, gm - 1, gd));
-            date.setUTCDate(date.getUTCDate() - 1);
-            const prevYear = date.getUTCFullYear();
-            const prevMonth = pad(date.getUTCMonth() + 1);
-            const prevDay = pad(date.getUTCDate());
-            return `${prevYear}-${prevMonth}-${prevDay}`;
         };
 
         const renderIndicators = (entries) => {
