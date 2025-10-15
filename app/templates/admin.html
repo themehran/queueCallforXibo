@@ -1,93 +1,133 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Queue Admin</title>
+    <title>پنل مدیریت نوبت</title>
     <style>
         :root {
             color-scheme: light dark;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "IRANSans", "Vazirmatn", "Tahoma", "Segoe UI", sans-serif;
         }
         body {
             margin: 0;
             padding: 0;
-            background: #f4f4f7;
-            color: #1f2933;
+            background: #f4f6fb;
+            color: #0f172a;
         }
         header {
             background: #0f172a;
             color: #fff;
-            padding: 1.25rem 2rem;
+            padding: 1.5rem 2rem;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+        header p {
+            margin: 0.4rem 0 0;
+            font-size: 0.95rem;
+            opacity: 0.85;
         }
         main {
-            padding: 2rem;
-            max-width: 960px;
+            padding: 2rem 1.5rem 3rem;
+            max-width: 1100px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
         }
-        h1 {
-            margin: 0;
-            font-size: 1.75rem;
+        h2 {
+            margin: 0 0 1rem;
+            font-size: 1.3rem;
+            font-weight: 700;
         }
         .card {
             background: #fff;
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            border-radius: 1rem;
+            padding: 1.75rem;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
         }
         label {
             display: block;
             font-weight: 600;
-            margin-bottom: 0.25rem;
+            font-size: 0.95rem;
+            margin-bottom: 0.35rem;
         }
         input[type="text"],
-        input[type="tel"],
-        input[type="date"] {
+        input[type="tel"] {
             width: 100%;
-            padding: 0.65rem 0.75rem;
-            border-radius: 0.5rem;
+            padding: 0.75rem 0.85rem;
+            border-radius: 0.65rem;
             border: 1px solid #d1d5db;
             font-size: 1rem;
             box-sizing: border-box;
+            background: #f9fafb;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+        input[type="text"]:focus,
+        input[type="tel"]:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+            background: #fff;
         }
         button {
             border: none;
             background: #2563eb;
             color: #fff;
-            padding: 0.7rem 1.25rem;
-            border-radius: 0.5rem;
+            padding: 0.75rem 1.35rem;
+            border-radius: 0.65rem;
             cursor: pointer;
             font-weight: 600;
-            transition: background 0.2s ease-in-out;
+            font-size: 0.95rem;
+            transition: transform 0.1s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        button:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
         }
         button.secondary {
             background: #e2e8f0;
             color: #0f172a;
         }
-        button:hover {
-            background: #1d4ed8;
-        }
         button.secondary:hover {
             background: #cbd5f5;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
+        button.quiet {
+            background: transparent;
+            color: #2563eb;
+            box-shadow: none;
         }
-        th, td {
-            padding: 0.75rem;
-            border-bottom: 1px solid #e5e7eb;
-            text-align: left;
+        button.quiet:hover {
+            background: rgba(37, 99, 235, 0.08);
         }
-        th {
-            background: #f8fafc;
-            font-weight: 600;
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .grid {
+            display: grid;
+            gap: 1rem;
+        }
+        .session-grid {
+            display: grid;
+            gap: 1.25rem;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            align-items: end;
+        }
+        .input-hint {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
         }
         .status {
-            margin-top: 0.75rem;
-            min-height: 1.25rem;
+            margin-top: 0.9rem;
+            min-height: 1.35rem;
             font-size: 0.95rem;
+            font-weight: 500;
         }
         .status.error {
             color: #dc2626;
@@ -95,70 +135,163 @@
         .status.success {
             color: #15803d;
         }
-        @media (max-width: 640px) {
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.25rem;
+        }
+        th, td {
+            padding: 0.8rem;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: right;
+            font-size: 0.95rem;
+        }
+        th {
+            background: #f8fafc;
+            font-weight: 700;
+        }
+        tr.active {
+            background: rgba(16, 185, 129, 0.12);
+        }
+        tr.served {
+            background: rgba(148, 163, 184, 0.16);
+            color: #475569;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .badge.active {
+            background: rgba(16, 185, 129, 0.18);
+            color: #047857;
+        }
+        .badge.waiting {
+            background: rgba(37, 99, 235, 0.18);
+            color: #1d4ed8;
+        }
+        .badge.served {
+            background: rgba(148, 163, 184, 0.3);
+            color: #475569;
+        }
+        .indicator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+        .indicator {
+            background: #f1f5f9;
+            border-radius: 0.9rem;
+            padding: 1rem;
+        }
+        .indicator h3 {
+            margin: 0 0 0.6rem;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .indicator .ticket {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .indicator .name {
+            margin: 0.25rem 0 0;
+            font-size: 0.95rem;
+            color: #475569;
+        }
+        @media (max-width: 720px) {
             main {
-                padding: 1rem;
+                padding: 1.5rem 1rem 2.5rem;
             }
-            th, td {
-                padding: 0.5rem;
+            .controls {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
             }
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>Queue Control Panel</h1>
+        <h1>پنل مدیریت نوبت</h1>
+        <p>سیستم صف کلینیک بینایی‌سنجی — مدیریت کامل مراجعین روزانه</p>
     </header>
     <main>
         <section class="card">
-            <h2>Queue Session</h2>
-            <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: end;">
+            <h2>تنظیم روز خدمت</h2>
+            <div class="session-grid">
                 <div>
-                    <label for="service-date">Service Date</label>
-                    <input type="date" id="service-date">
+                    <label for="service-date">تاریخ خدمت (شمسی)</label>
+                    <input type="text" id="service-date" placeholder="۱۴۰۳-۰۱-۰۱" autocomplete="off">
+                    <div class="input-hint">فرمت: سال-ماه-روز</div>
                 </div>
-                <div style="display: flex; gap: 0.75rem;">
-                    <button id="start-day">Start New Day</button>
-                    <button id="refresh" class="secondary">Refresh List</button>
+                <div class="controls">
+                    <button id="start-day">شروع روز جدید</button>
+                    <button id="call-next">فراخوانی نفر بعد</button>
+                    <button id="call-previous" class="secondary">بازگرداندن نفر قبلی</button>
+                    <button id="refresh" class="quiet">به‌روزرسانی لیست</button>
+                </div>
+            </div>
+            <div class="indicator-grid">
+                <div class="indicator" id="active-indicator">
+                    <h3>در حال خدمت</h3>
+                    <p class="ticket">—</p>
+                    <p class="name">هنوز فراخوانی نشده است</p>
+                </div>
+                <div class="indicator" id="next-indicator">
+                    <h3>نفر بعدی در صف</h3>
+                    <p class="ticket">—</p>
+                    <p class="name">در انتظار فراخوانی</p>
                 </div>
             </div>
             <div id="day-status" class="status"></div>
         </section>
 
         <section class="card">
-            <h2>Register Caller</h2>
-            <form id="entry-form">
-                <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-                    <div>
-                        <label for="name">Full Name</label>
-                        <input type="text" id="name" name="name" required placeholder="Visitor name">
-                    </div>
-                    <div>
-                        <label for="phone">Phone Number</label>
-                        <input type="tel" id="phone" name="phone" required placeholder="+1 555 0100">
-                    </div>
+            <h2>ثبت مراجع جدید</h2>
+            <form id="entry-form" class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                <div>
+                    <label for="name">نام و نام خانوادگی</label>
+                    <input type="text" id="name" name="name" placeholder="مثال: سارا رضایی" autocomplete="off" required>
                 </div>
-                <div style="margin-top: 1rem;">
-                    <button type="submit">Issue Ticket</button>
+                <div>
+                    <label for="phone">شماره تماس</label>
+                    <input type="tel" id="phone" name="phone" placeholder="مثال: ۰۹۱۲۱۲۳۴۵۶۷" autocomplete="off" required>
+                    <div class="input-hint">پذیرش: +989121234567 ، 09121234567 ، 9121234567</div>
+                </div>
+                <div>
+                    <label for="birthday">تاریخ تولد (شمسی)</label>
+                    <input type="text" id="birthday" name="birthday" placeholder="مثال: ۱۳۷۵-۰۳-۲۵" autocomplete="off">
+                </div>
+                <div style="align-self: end;">
+                    <button type="submit">ثبت در صف</button>
                 </div>
             </form>
             <div id="entry-status" class="status"></div>
         </section>
 
         <section class="card">
-            <h2>Today's Queue</h2>
+            <h2>لیست نوبت‌های امروز</h2>
             <table>
                 <thead>
                     <tr>
-                        <th>Ticket</th>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Created</th>
+                        <th>نوبت در صف</th>
+                        <th>نام مراجعه‌کننده</th>
+                        <th>شماره تماس</th>
+                        <th>تاریخ تولد</th>
+                        <th>وضعیت</th>
+                        <th>زمان ثبت</th>
                     </tr>
                 </thead>
                 <tbody id="queue-body">
                     <tr>
-                        <td colspan="4" style="text-align: center; padding: 1.5rem;">No entries yet.</td>
+                        <td colspan="6" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td>
                     </tr>
                 </tbody>
             </table>
@@ -166,106 +299,375 @@
     </main>
 
     <script>
+        const persianDigits = ["۰","۱","۲","۳","۴","۵","۶","۷","۸","۹"];
+
+        const toPersianDigits = (value) => (value ?? "").toString().replace(/[0-9]/g, (d) => persianDigits[Number(d)]);
+
+        const normalizeDigits = (value) => (value ?? "").replace(/[۰-۹]/g, (d) => String(persianDigits.indexOf(d))).replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+
+        const pad = (value) => value.toString().padStart(2, "0");
+
+        const div = (a, b) => Math.floor(a / b);
+
+        const gregorianToJalali = (gy, gm, gd) => {
+            let g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+            let gy2 = gy - 1600;
+            let gm2 = gm - 1;
+            let gd2 = gd - 1;
+            let g_day_no = 365 * gy2 + div(gy2 + 3, 4) - div(gy2 + 99, 100) + div(gy2 + 399, 400);
+            g_day_no += g_d_m[gm2] + gd2;
+            if (gm2 > 1 && ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0)) {
+                g_day_no += 1;
+            }
+            let j_day_no = g_day_no - 79;
+            let j_np = div(j_day_no, 12053);
+            j_day_no = j_day_no % 12053;
+            let jy = 979 + 33 * j_np + 4 * div(j_day_no, 1461);
+            j_day_no %= 1461;
+            if (j_day_no >= 366) {
+                jy += div(j_day_no - 1, 365);
+                j_day_no = (j_day_no - 1) % 365;
+            }
+            let jm = j_day_no < 186 ? 1 + div(j_day_no, 31) : 7 + div(j_day_no - 186, 30);
+            let jd = 1 + (j_day_no < 186 ? j_day_no % 31 : (j_day_no - 186) % 30);
+            return [jy, jm, jd];
+        };
+
+        const jalaliToGregorian = (jy, jm, jd) => {
+            jy = jy - 979;
+            jm = jm - 1;
+            jd = jd - 1;
+            let j_day_no = 365 * jy + div(jy, 33) * 8 + div((jy % 33 + 3), 4);
+            j_day_no += jm < 6 ? jm * 31 : jm * 30 + 186;
+            j_day_no += jd;
+            let g_day_no = j_day_no + 79;
+            let gy = 1600 + 400 * div(g_day_no, 146097);
+            g_day_no %= 146097;
+            let leap = true;
+            if (g_day_no >= 36525) {
+                g_day_no--;
+                gy += 100 * div(g_day_no, 36524);
+                g_day_no %= 36524;
+                if (g_day_no >= 365) {
+                    g_day_no++;
+                } else {
+                    leap = false;
+                }
+            }
+            gy += 4 * div(g_day_no, 1461);
+            g_day_no %= 1461;
+            if (g_day_no >= 366) {
+                leap = false;
+                g_day_no--;
+                gy += div(g_day_no, 365);
+                g_day_no %= 365;
+            }
+            const gdMatrix = [0, 31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            let gm;
+            for (gm = 1; gm <= 12; gm++) {
+                const days = gdMatrix[gm];
+                if (g_day_no < days) break;
+                g_day_no -= days;
+            }
+            const gd = g_day_no + 1;
+            return [gy, gm, gd];
+        };
+
+        const jalaliToIso = (jalaliString) => {
+            const normalized = normalizeDigits(jalaliString ?? "").replace(/[./]/g, "-").trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+                return null;
+            }
+            const [jy, jm, jd] = normalized.split("-").map(Number);
+            if (jm < 1 || jm > 12 || jd < 1 || jd > 31) {
+                return null;
+            }
+            const [gy, gm, gd] = jalaliToGregorian(jy, jm, jd);
+            if (Number.isNaN(gy) || Number.isNaN(gm) || Number.isNaN(gd)) {
+                return null;
+            }
+            return `${gy}-${pad(gm)}-${pad(gd)}`;
+        };
+
+        const isoToJalali = (isoDate) => {
+            if (!isoDate) return null;
+            const [gy, gm, gd] = isoDate.split("-").map(Number);
+            if ([gy, gm, gd].some(Number.isNaN)) return null;
+            const [jy, jm, jd] = gregorianToJalali(gy, gm, gd);
+            return `${jy}-${pad(jm)}-${pad(jd)}`;
+        };
+
+        const toPersianDate = (isoDate) => {
+            const jalali = isoToJalali(isoDate);
+            return jalali ? toPersianDigits(jalali) : "—";
+        };
+
+        const toPersianTime = (isoString) => {
+            if (!isoString) return "—";
+            const date = new Date(isoString);
+            if (Number.isNaN(date.getTime())) return "—";
+            return new Intl.DateTimeFormat("fa-IR", { hour: "2-digit", minute: "2-digit" }).format(date);
+        };
+
         const serviceDateInput = document.getElementById("service-date");
         const startDayButton = document.getElementById("start-day");
+        const callNextButton = document.getElementById("call-next");
+        const callPreviousButton = document.getElementById("call-previous");
         const refreshButton = document.getElementById("refresh");
         const dayStatus = document.getElementById("day-status");
         const entryForm = document.getElementById("entry-form");
         const entryStatus = document.getElementById("entry-status");
         const queueBody = document.getElementById("queue-body");
+        const activeIndicator = document.getElementById("active-indicator");
+        const nextIndicator = document.getElementById("next-indicator");
+        const birthdayInput = document.getElementById("birthday");
 
         const todayIso = new Date().toISOString().slice(0, 10);
-        serviceDateInput.value = todayIso;
+        const todayJalali = isoToJalali(todayIso);
+        serviceDateInput.value = toPersianDigits(todayJalali);
 
         const setStatus = (element, message, type = "") => {
             element.textContent = message;
             element.className = `status ${type}`;
             if (message) {
-                setTimeout(() => { element.textContent = ""; element.className = "status"; }, 5500);
+                setTimeout(() => {
+                    element.textContent = "";
+                    element.className = "status";
+                }, 6000);
             }
         };
 
-        const fetchEntries = async () => {
-            const date = serviceDateInput.value || todayIso;
-            const response = await fetch(`/queue/entries?service_date=${date}`);
-            if (!response.ok) {
-                setStatus(dayStatus, "Failed to load entries.", "error");
-                return;
+        const getServiceDateIso = (showError = true) => {
+            const raw = serviceDateInput.value.trim();
+            if (!raw) {
+                return todayIso;
             }
-            const data = await response.json();
-            renderEntries(data);
+            const iso = jalaliToIso(raw);
+            if (!iso && showError) {
+                setStatus(dayStatus, "تاریخ خدمت معتبر نیست.", "error");
+            }
+            return iso;
+        };
+
+        const renderIndicators = (entries) => {
+            const active = entries.find((entry) => entry.status === "active");
+            const next = entries.find((entry) => entry.status === "waiting");
+
+            if (active) {
+                activeIndicator.querySelector(".ticket").textContent = toPersianDigits(active.ticket_number);
+                activeIndicator.querySelector(".name").textContent = `${active.name} — ${toPersianDigits(active.phone)}`;
+            } else {
+                activeIndicator.querySelector(".ticket").textContent = "—";
+                activeIndicator.querySelector(".name").textContent = "هنوز فراخوانی نشده است";
+            }
+
+            if (next) {
+                nextIndicator.querySelector(".ticket").textContent = toPersianDigits(next.ticket_number);
+                nextIndicator.querySelector(".name").textContent = `${next.name} — ${toPersianDigits(next.phone)}`;
+            } else {
+                nextIndicator.querySelector(".ticket").textContent = "—";
+                nextIndicator.querySelector(".name").textContent = "در انتظار ثبت نوبت";
+            }
+        };
+
+        const statusLabel = (status) => {
+            switch (status) {
+                case "active":
+                    return "در حال خدمت";
+                case "served":
+                    return "انجام شد";
+                default:
+                    return "در صف";
+            }
         };
 
         const renderEntries = (entries) => {
             if (!entries.length) {
-                queueBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 1.5rem;">No entries yet.</td></tr>';
+                queueBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td></tr>';
+                renderIndicators([]);
                 return;
             }
-            const rows = entries.map(entry => {
-                const created = new Date(entry.created_at || new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                return `<tr>
-                    <td>${entry.ticket_number}</td>
+            const rows = entries.map((entry) => {
+                const rowClass = entry.status === "active" ? "active" : entry.status === "served" ? "served" : "";
+                const badgeClass = `badge ${entry.status}`;
+                const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
+                const statusText = statusLabel(entry.status);
+                return `<tr class="${rowClass}">
+                    <td>${toPersianDigits(entry.ticket_number)}</td>
                     <td>${entry.name}</td>
-                    <td>${entry.phone}</td>
-                    <td>${created}</td>
+                    <td>${toPersianDigits(entry.phone)}</td>
+                    <td>${birthday}</td>
+                    <td><span class="${badgeClass}">${statusText}</span></td>
+                    <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
                 </tr>`;
             });
             queueBody.innerHTML = rows.join("");
+            renderIndicators(entries);
         };
 
+        const fetchEntries = async () => {
+            const raw = serviceDateInput.value.trim();
+            const isoDate = raw ? jalaliToIso(raw) : todayIso;
+            if (!isoDate) {
+                setStatus(dayStatus, "تاریخ خدمت معتبر نیست.", "error");
+                return;
+            }
+            try {
+                const response = await fetch(`/queue/entries?service_date=${isoDate}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    setStatus(dayStatus, err.detail || "خطا در دریافت لیست نوبت‌ها", "error");
+                    return;
+                }
+                const data = await response.json();
+                renderEntries(data);
+            } catch (error) {
+                setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
+            }
+        };
+
+        const confirmStartDay = (jalaliDate) => window.confirm(`آیا از شروع روز جدید برای ${jalaliDate} مطمئن هستید؟ این کار نوبت‌های ثبت‌شده را برای این تاریخ حذف می‌کند.`);
+
         startDayButton.addEventListener("click", async () => {
-            const date = serviceDateInput.value || todayIso;
-            if (!confirm(`Start a new queue for ${date}? This will reset today's numbers.`)) {
+            const isoDate = getServiceDateIso();
+            const jalali = isoToJalali(isoDate);
+            if (!isoDate || !jalali) {
+                setStatus(dayStatus, "تاریخ خدمت معتبر نیست.", "error");
+                return;
+            }
+            if (!confirmStartDay(toPersianDigits(jalali))) {
                 return;
             }
             try {
                 const response = await fetch("/queue/start-day", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ service_date: date, overwrite: true }),
+                    body: JSON.stringify({ service_date: isoDate, overwrite: true }),
                 });
                 if (!response.ok) {
                     const err = await response.json();
-                    setStatus(dayStatus, err.detail || "Failed to start day.", "error");
+                    setStatus(dayStatus, err.detail || "خطا در ثبت روز جدید", "error");
                     return;
                 }
-                setStatus(dayStatus, `Queue started for ${date}.`, "success");
+                setStatus(dayStatus, `روز ${toPersianDigits(jalali)} با موفقیت آغاز شد.`, "success");
                 await fetchEntries();
             } catch (error) {
-                setStatus(dayStatus, "Unable to reach server.", "error");
+                setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
+            }
+        });
+
+        callNextButton.addEventListener("click", async () => {
+            const isoDate = getServiceDateIso();
+            if (!isoDate) {
+                return;
+            }
+            try {
+                const response = await fetch("/queue/next", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service_date: isoDate }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    setStatus(dayStatus, err.detail || "امکان فراخوانی نفر بعد وجود ندارد", "error");
+                    return;
+                }
+                const data = await response.json();
+                setStatus(dayStatus, data.detail || "نوبت بعدی فراخوانده شد.", "success");
+                await fetchEntries();
+            } catch (error) {
+                setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
+            }
+        });
+
+        callPreviousButton.addEventListener("click", async () => {
+            const isoDate = getServiceDateIso();
+            if (!isoDate) {
+                return;
+            }
+            try {
+                const response = await fetch("/queue/previous", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service_date: isoDate }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    setStatus(dayStatus, err.detail || "نفر قبلی قابل بازگردانی نیست", "error");
+                    return;
+                }
+                const data = await response.json();
+                setStatus(dayStatus, data.detail || "نفر قبلی فعال شد.", "success");
+                await fetchEntries();
+            } catch (error) {
+                setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
             }
         });
 
         refreshButton.addEventListener("click", fetchEntries);
 
+        serviceDateInput.addEventListener("blur", () => {
+            const iso = jalaliToIso(serviceDateInput.value);
+            if (iso) {
+                const jalali = isoToJalali(iso);
+                serviceDateInput.value = toPersianDigits(jalali);
+            }
+        });
+
+        const parseBirthdayIso = () => {
+            const value = birthdayInput.value.trim();
+            if (!value) return null;
+            const iso = jalaliToIso(value);
+            return iso;
+        };
+
+        birthdayInput.addEventListener("blur", () => {
+            const iso = jalaliToIso(birthdayInput.value);
+            if (iso) {
+                birthdayInput.value = toPersianDigits(isoToJalali(iso));
+            }
+        });
+
         entryForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const formData = new FormData(entryForm);
-            const payload = {
-                name: formData.get("name")?.trim(),
-                phone: formData.get("phone")?.trim(),
-                service_date: serviceDateInput.value || todayIso,
-            };
-            if (!payload.name || !payload.phone) {
-                setStatus(entryStatus, "Name and phone are required.", "error");
+            const name = formData.get("name")?.toString().trim();
+            const phone = formData.get("phone")?.toString().trim();
+            if (!name || !phone) {
+                setStatus(entryStatus, "نام و شماره تماس الزامی است.", "error");
                 return;
             }
+            const serviceDateIso = getServiceDateIso();
+            if (!serviceDateIso) {
+                return;
+            }
+            const birthdayIso = parseBirthdayIso();
+            if (formData.get("birthday") && !birthdayIso) {
+                setStatus(entryStatus, "تاریخ تولد معتبر نیست.", "error");
+                return;
+            }
+            const payload = {
+                name,
+                phone,
+                service_date: serviceDateIso,
+                birthday: birthdayIso,
+            };
             try {
                 const response = await fetch("/queue/entries", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
+                const body = await response.json();
                 if (!response.ok) {
-                    const err = await response.json();
-                    setStatus(entryStatus, err.detail || "Ticket creation failed.", "error");
+                    setStatus(entryStatus, body.detail || "خطا در ثبت نوبت.", "error");
                     return;
                 }
                 entryForm.reset();
-                setStatus(entryStatus, "Ticket issued.", "success");
+                setStatus(entryStatus, "نوبت با موفقیت ثبت شد.", "success");
                 await fetchEntries();
             } catch (error) {
-                setStatus(entryStatus, "Unable to reach server.", "error");
+                setStatus(entryStatus, "اتصال به سرور برقرار نشد.", "error");
             }
         });
 

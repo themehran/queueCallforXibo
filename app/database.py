@@ -15,6 +15,19 @@ engine = create_engine(
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    with engine.begin() as conn:
+        columns = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(queueentry)")
+        }
+        if "status" not in columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE queueentry ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'waiting'"
+            )
+        if "birthday" not in columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE queueentry ADD COLUMN birthday DATE"
+            )
 
 
 @contextmanager

@@ -18,6 +18,8 @@ class QueueEntry(SQLModel, table=True):
     name: str = Field(max_length=255, nullable=False)
     phone: str = Field(max_length=32, nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    status: str = Field(max_length=16, nullable=False, default="waiting")
+    birthday: Optional[date] = Field(default=None, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("service_date", "ticket_index", name="uq_queue_entry_per_day"),

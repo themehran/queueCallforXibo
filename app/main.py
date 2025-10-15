@@ -1,7 +1,8 @@
 from datetime import date, datetime
+import re
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
+from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -53,11 +54,26 @@ class QueueEntryCreate(BaseModel):
     name: str
     phone: str
     service_date: Optional[date] = None
+    birthday: Optional[date] = None
 
     @field_validator("service_date", mode="before")
     @classmethod
     def parse_service_date(cls, value: object) -> Optional[date]:
         return parse_service_date_value(value)
+
+    @field_validator("birthday", mode="before")
+    @classmethod
+    def parse_birthday(cls, value: object) -> Optional[date]:
+        if value in (None, "", "null"):
+            return None
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError as exc:
+                raise ValueError("birthday must use YYYY-MM-DD format") from exc
+        raise ValueError("Unsupported birthday value")
 
 
 class QueueEntryRead(BaseModel):
@@ -68,6 +84,8 @@ class QueueEntryRead(BaseModel):
     name: str
     phone: str
     created_at: datetime
+    status: str
+    birthday: Optional[date] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +95,12 @@ class QueueDayRead(BaseModel):
     started_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QueueFlowResponse(BaseModel):
+    active: Optional[QueueEntryRead] = None
+    served: Optional[QueueEntryRead] = None
+    detail: str
 
 
 @app.on_event("startup")
@@ -98,6 +122,78 @@ def resolve_service_day(value: Optional[str]) -> date:
         raise HTTPException(
             status_code=400, detail="Invalid service_date format. Use YYYY-MM-DD."
         ) from exc
+
+
+def normalize_phone(phone: str) -> str:
+    cleaned = re.sub(r"[\s\-()]+", "", phone or "")
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+
+    if cleaned.startswith("+"):
+        digits = cleaned[1:]
+    else:
+        digits = cleaned
+
+    if digits.startswith("98"):
+        local = digits[2:]
+    elif digits.startswith("0") and len(digits) == 11 and digits[1] == "9":
+        local = digits[1:]
+    elif digits.startswith("9") and len(digits) == 10:
+        local = digits
+    else:
+        raise HTTPException(status_code=400, detail="Invalid Iranian mobile number format")
+
+    if len(local) != 10 or not local.isdigit() or not local.startswith("9"):
+        raise HTTPException(status_code=400, detail="Invalid Iranian mobile number format")
+
+    return f"+98{local}"
+
+
+def get_active_entry(session: Session, service_day: date) -> Optional[QueueEntry]:
+    return session.exec(
+        select(QueueEntry)
+        .where(
+            QueueEntry.service_date == service_day,
+            QueueEntry.status == "active",
+        )
+        .order_by(QueueEntry.ticket_index.asc())
+    ).first()
+
+
+def get_next_waiting_entry(session: Session, service_day: date, after_index: int = 0) -> Optional[QueueEntry]:
+    entry = session.exec(
+        select(QueueEntry)
+        .where(
+            QueueEntry.service_date == service_day,
+            QueueEntry.status == "waiting",
+            QueueEntry.ticket_index > after_index,
+        )
+        .order_by(QueueEntry.ticket_index.asc())
+    ).first()
+    if entry is not None:
+        return entry
+    return session.exec(
+        select(QueueEntry)
+        .where(
+            QueueEntry.service_date == service_day,
+            QueueEntry.status == "waiting",
+        )
+        .order_by(QueueEntry.ticket_index.asc())
+    ).first()
+
+
+def get_last_served_entry(session: Session, service_day: date) -> Optional[QueueEntry]:
+    return session.exec(
+        select(QueueEntry)
+        .where(
+            QueueEntry.service_date == service_day,
+            QueueEntry.status == "served",
+        )
+        .order_by(QueueEntry.ticket_index.desc())
+    ).first()
 
 
 @app.post("/queue/start-day", response_model=QueueDayRead, status_code=status.HTTP_201_CREATED)
@@ -135,6 +231,7 @@ def create_entry(
     phone = payload.phone.strip()
     if not name or not phone:
         raise HTTPException(status_code=400, detail="Name and phone are required")
+    normalized_phone = normalize_phone(phone)
 
     max_index = session.exec(
         select(func.max(QueueEntry.ticket_index)).where(QueueEntry.service_date == service_date)
@@ -149,7 +246,8 @@ def create_entry(
         ticket_index=next_index,
         ticket_number=f"{next_index:03d}",
         name=name,
-        phone=phone,
+        phone=normalized_phone,
+        birthday=payload.birthday,
     )
     session.add(entry)
     session.commit()
@@ -190,10 +288,75 @@ def display_payload(
                 "ticket": entry.ticket_number,
                 "name": entry.name,
                 "phone": entry.phone,
+                "status": entry.status,
+                "birthday": entry.birthday.isoformat() if entry.birthday else None,
             }
             for entry in entries
         ],
     }
+
+
+@app.post("/queue/next", response_model=QueueFlowResponse)
+def call_next_number(
+    service_date: Optional[str] = Body(default=None, embed=True),
+    session: Session = Depends(get_db_session),
+) -> QueueFlowResponse:
+    service_day = resolve_service_day(service_date)
+    active_entry = get_active_entry(session, service_day)
+    served_entry: Optional[QueueEntry] = None
+    last_index = 0
+    if active_entry:
+        active_entry.status = "served"
+        served_entry = active_entry
+        last_index = active_entry.ticket_index
+    else:
+        last_served = get_last_served_entry(session, service_day)
+        if last_served is not None:
+            last_index = last_served.ticket_index
+
+    next_entry = get_next_waiting_entry(session, service_day, after_index=last_index)
+    if next_entry:
+        next_entry.status = "active"
+
+    session.commit()
+
+    if next_entry:
+        session.refresh(next_entry)
+    if served_entry:
+        session.refresh(served_entry)
+
+    return QueueFlowResponse(
+        active=QueueEntryRead.model_validate(next_entry) if next_entry else None,
+        served=QueueEntryRead.model_validate(served_entry) if served_entry else None,
+        detail="نفر بعدی فراخوانی شد" if next_entry else "فردی در صف باقی نمانده است",
+    )
+
+
+@app.post("/queue/previous", response_model=QueueFlowResponse)
+def call_previous_number(
+    service_date: Optional[str] = Body(default=None, embed=True),
+    session: Session = Depends(get_db_session),
+) -> QueueFlowResponse:
+    service_day = resolve_service_day(service_date)
+    previous_entry = get_last_served_entry(session, service_day)
+    if previous_entry is None:
+        raise HTTPException(status_code=404, detail="نفر قبلی برای بازگرداندن وجود ندارد")
+
+    active_entry = get_active_entry(session, service_day)
+    if active_entry:
+        active_entry.status = "waiting"
+    previous_entry.status = "active"
+    session.commit()
+
+    session.refresh(previous_entry)
+    if active_entry:
+        session.refresh(active_entry)
+
+    return QueueFlowResponse(
+        active=QueueEntryRead.model_validate(previous_entry),
+        served=None,
+        detail="نفر قبلی دوباره فراخوانی شد",
+    )
 
 
 @app.post("/queue/xibo", response_model=QueueEntryRead)
