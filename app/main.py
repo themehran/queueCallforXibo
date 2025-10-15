@@ -144,8 +144,37 @@ def resolve_service_day(value: Optional[str]) -> date:
         ) from exc
 
 
+PERSIAN_DIGIT_TRANSLATION = {
+    ord("۰"): "0",
+    ord("۱"): "1",
+    ord("۲"): "2",
+    ord("۳"): "3",
+    ord("۴"): "4",
+    ord("۵"): "5",
+    ord("۶"): "6",
+    ord("۷"): "7",
+    ord("۸"): "8",
+    ord("۹"): "9",
+    ord("٠"): "0",
+    ord("١"): "1",
+    ord("٢"): "2",
+    ord("٣"): "3",
+    ord("٤"): "4",
+    ord("٥"): "5",
+    ord("٦"): "6",
+    ord("٧"): "7",
+    ord("٨"): "8",
+    ord("٩"): "9",
+}
+
+
+def normalize_digits(value: str) -> str:
+    return (value or "").translate(PERSIAN_DIGIT_TRANSLATION)
+
+
 def normalize_phone(phone: str) -> str:
-    cleaned = re.sub(r"[\s\-()]+", "", phone or "")
+    normalized = normalize_digits(phone or "")
+    cleaned = re.sub(r"[\s\-()]+", "", normalized)
     if not cleaned:
         raise HTTPException(status_code=400, detail="Phone number is required")
 
@@ -256,7 +285,7 @@ def create_entry(
         session.commit()
 
     name = payload.name.strip()
-    phone = payload.phone.strip()
+    phone = (payload.phone or "").strip()
     if not name or not phone:
         raise HTTPException(status_code=400, detail="Name and phone are required")
     normalized_phone = normalize_phone(phone)
@@ -304,7 +333,7 @@ def update_entry(
         entry.name = name
 
     if "phone" in updates:
-        phone_value = (updates["phone"] or "").strip()
+        phone_value = normalize_digits((updates["phone"] or "").strip())
         if not phone_value:
             raise HTTPException(status_code=400, detail="شماره تماس نمی‌تواند خالی باشد")
         entry.phone = normalize_phone(phone_value)
@@ -343,11 +372,29 @@ def display_payload(
         .where(QueueEntry.service_date == service_day)
         .order_by(QueueEntry.ticket_index.asc())
     ).all()
-    active_entry = next((entry for entry in entries if entry.status == "active"), None)
-    next_entry = next((entry for entry in entries if entry.status == "waiting"), None)
+    active_entry: Optional[QueueEntry] = None
+    next_entry: Optional[QueueEntry] = None
+    waiting_count = 0
+    served_count = 0
+
+    for entry in entries:
+        if entry.status == "served":
+            served_count += 1
+            continue
+        if entry.status == "active" and active_entry is None:
+            active_entry = entry
+        if entry.status == "waiting":
+            waiting_count += 1
+            if next_entry is None:
+                next_entry = entry
+
+    pending_count = len(entries) - served_count
     return {
         "service_date": service_day.isoformat(),
         "count": len(entries),
+        "pending_count": pending_count,
+        "waiting_count": waiting_count,
+        "served_count": served_count,
         "active": (
             {
                 "ticket": active_entry.ticket_number,

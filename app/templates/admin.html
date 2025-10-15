@@ -198,6 +198,22 @@
             border-radius: 0.9rem;
             padding: 1rem;
         }
+        .indicator.queue-blue {
+            background: rgba(59, 130, 246, 0.14);
+            color: #1d4ed8;
+        }
+        .indicator.queue-green {
+            background: rgba(16, 185, 129, 0.18);
+            color: #047857;
+        }
+        .indicator.queue-yellow {
+            background: rgba(250, 204, 21, 0.2);
+            color: #92400e;
+        }
+        .indicator.queue-red {
+            background: rgba(239, 68, 68, 0.18);
+            color: #b91c1c;
+        }
         .indicator h3 {
             margin: 0 0 0.6rem;
             font-size: 1rem;
@@ -377,6 +393,11 @@
                     <h3>نفر بعدی در صف</h3>
                     <p class="ticket">—</p>
                     <p class="name">در انتظار فراخوانی</p>
+                </div>
+                <div class="indicator queue-blue" id="count-indicator">
+                    <h3>وضعیت صف</h3>
+                    <p class="ticket">۰</p>
+                    <p class="name">صف خالی است</p>
                 </div>
             </div>
             <div id="day-status" class="status"></div>
@@ -810,6 +831,7 @@
         const queueBody = document.getElementById("queue-body");
         const activeIndicator = document.getElementById("active-indicator");
         const nextIndicator = document.getElementById("next-indicator");
+        const countIndicator = document.getElementById("count-indicator");
         const birthdayInput = document.getElementById("birthday");
         const reportCard = document.getElementById("previous-report-card");
         const reportBody = document.getElementById("previous-report-body");
@@ -881,10 +903,12 @@
             return iso;
         };
 
+        const COUNT_LEVEL_CLASSES = ["queue-blue", "queue-green", "queue-yellow", "queue-red"];
+
         const renderIndicators = (entries, serviceDateIso) => {
             const active = entries.find((entry) => entry.status === "active");
             const waitingEntries = entries.filter((entry) => entry.status === "waiting");
-            const next = waitingEntries[0];
+            const next = waitingEntries.length ? waitingEntries[0] : null;
             const servedCount = entries.filter((entry) => entry.status === "served").length;
             const pendingCount = entries.length - servedCount;
             const waitingCount = waitingEntries.length;
@@ -909,6 +933,8 @@
             if (countIndicator) {
                 const ticketEl = countIndicator.querySelector(".ticket");
                 const nameEl = countIndicator.querySelector(".name");
+                COUNT_LEVEL_CLASSES.forEach((cls) => countIndicator.classList.remove(cls));
+                let levelClass = "queue-blue";
                 if (!entries.length) {
                     ticketEl.textContent = "۰";
                     nameEl.textContent = "صف خالی است";
@@ -920,7 +946,17 @@
                     if (!isTodayView) {
                         nameEl.textContent += " (نمایش تاریخ دیگر)";
                     }
+                    if (pendingCount <= 3) {
+                        levelClass = "queue-blue";
+                    } else if (pendingCount <= 5) {
+                        levelClass = "queue-green";
+                    } else if (pendingCount <= 10) {
+                        levelClass = "queue-yellow";
+                    } else {
+                        levelClass = "queue-red";
+                    }
                 }
+                countIndicator.classList.add(levelClass);
             }
         };
 
@@ -1216,9 +1252,10 @@
                 setStatus(entryStatus, "تاریخ تولد معتبر نیست.", "error");
                 return;
             }
+            const normalizedPhone = normalizeDigits(phone);
             const payload = {
                 name,
-                phone,
+                phone: normalizedPhone,
                 service_date: serviceDateIso,
                 birthday: birthdayIso,
             };
