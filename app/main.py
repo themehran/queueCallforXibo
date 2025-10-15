@@ -206,7 +206,7 @@ def start_day(
         select(QueueEntry.id).where(QueueEntry.service_date == service_date)
     ).first() is not None
     if existing and not payload.overwrite:
-        raise HTTPException(status_code=400, detail="Queue for this date already started")
+        raise HTTPException(status_code=400, detail="صف برای این تاریخ قبلاً آغاز شده است")
     if existing and entries_exist:
         raise HTTPException(
             status_code=400,

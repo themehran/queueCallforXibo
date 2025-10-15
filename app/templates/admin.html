@@ -95,6 +95,12 @@
         button.secondary:hover {
             background: #cbd5f5;
         }
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
         button.quiet {
             background: transparent;
             color: #2563eb;
@@ -102,6 +108,9 @@
         }
         button.quiet:hover {
             background: rgba(37, 99, 235, 0.08);
+        }
+        .hidden {
+            display: none !important;
         }
         .controls {
             display: flex;
@@ -235,6 +244,7 @@
                     <button id="start-day">شروع روز جدید</button>
                     <button id="call-next">فراخوانی نفر بعد</button>
                     <button id="call-previous" class="secondary">بازگرداندن نفر قبلی</button>
+                    <button id="previous-report" class="secondary">گزارش روز قبل</button>
                     <button id="refresh" class="quiet">به‌روزرسانی لیست</button>
                 </div>
             </div>
@@ -295,6 +305,31 @@
                     </tr>
                 </tbody>
             </table>
+        </section>
+
+        <section class="card hidden" id="previous-report-card">
+            <h2>گزارش روز قبل</h2>
+            <p style="margin-top: -0.5rem; color: #475569; font-size: 0.9rem;">
+                گزارش مربوط به تاریخ <span id="previous-report-date">—</span>
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>نوبت در صف</th>
+                        <th>نام مراجعه‌کننده</th>
+                        <th>شماره تماس</th>
+                        <th>تاریخ تولد</th>
+                        <th>وضعیت</th>
+                        <th>زمان ثبت</th>
+                    </tr>
+                </thead>
+                <tbody id="previous-report-body">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 1.5rem;">ابتدا گزارش را دریافت کنید.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div id="previous-report-status" class="status"></div>
         </section>
     </main>
 
@@ -413,6 +448,7 @@
         const startDayButton = document.getElementById("start-day");
         const callNextButton = document.getElementById("call-next");
         const callPreviousButton = document.getElementById("call-previous");
+        const previousReportButton = document.getElementById("previous-report");
         const refreshButton = document.getElementById("refresh");
         const dayStatus = document.getElementById("day-status");
         const entryForm = document.getElementById("entry-form");
@@ -421,6 +457,10 @@
         const activeIndicator = document.getElementById("active-indicator");
         const nextIndicator = document.getElementById("next-indicator");
         const birthdayInput = document.getElementById("birthday");
+        const reportCard = document.getElementById("previous-report-card");
+        const reportBody = document.getElementById("previous-report-body");
+        const reportStatus = document.getElementById("previous-report-status");
+        const reportDateLabel = document.getElementById("previous-report-date");
 
         const todayIso = new Date().toISOString().slice(0, 10);
         const todayJalali = isoToJalali(todayIso);
@@ -437,6 +477,17 @@
             }
         };
 
+        const setReportStatus = (message, type = "") => {
+            reportStatus.textContent = message;
+            reportStatus.className = `status ${type}`;
+            if (message) {
+                setTimeout(() => {
+                    reportStatus.textContent = "";
+                    reportStatus.className = "status";
+                }, 6000);
+            }
+        };
+
         const getServiceDateIso = (showError = true) => {
             const raw = serviceDateInput.value.trim();
             if (!raw) {
@@ -447,6 +498,19 @@
                 setStatus(dayStatus, "تاریخ خدمت معتبر نیست.", "error");
             }
             return iso;
+        };
+
+        const getPreviousDayIso = (isoDate) => {
+            const [gy, gm, gd] = isoDate.split("-").map(Number);
+            if ([gy, gm, gd].some(Number.isNaN)) {
+                return null;
+            }
+            const date = new Date(Date.UTC(gy, gm - 1, gd));
+            date.setUTCDate(date.getUTCDate() - 1);
+            const prevYear = date.getUTCFullYear();
+            const prevMonth = pad(date.getUTCMonth() + 1);
+            const prevDay = pad(date.getUTCDate());
+            return `${prevYear}-${prevMonth}-${prevDay}`;
         };
 
         const renderIndicators = (entries) => {
@@ -485,6 +549,7 @@
             if (!entries.length) {
                 queueBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td></tr>';
                 renderIndicators([]);
+                startDayButton.disabled = false;
                 return;
             }
             const rows = entries.map((entry) => {
@@ -503,6 +568,7 @@
             });
             queueBody.innerHTML = rows.join("");
             renderIndicators(entries);
+            startDayButton.disabled = entries.length > 0;
         };
 
         const fetchEntries = async () => {
@@ -577,6 +643,54 @@
                 await fetchEntries();
             } catch (error) {
                 setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
+            }
+        });
+
+        previousReportButton.addEventListener("click", async () => {
+            const isoDate = getServiceDateIso();
+            if (!isoDate) {
+                return;
+            }
+            const previousIso = getPreviousDayIso(isoDate);
+            if (!previousIso) {
+                setReportStatus("تاریخ قبلی معتبر نیست.", "error");
+                reportCard.classList.remove("hidden");
+                return;
+            }
+            try {
+                const response = await fetch(`/queue/entries?service_date=${previousIso}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    setReportStatus(err.detail || "خطا در دریافت گزارش روز قبل", "error");
+                    reportCard.classList.remove("hidden");
+                    return;
+                }
+                const data = await response.json();
+                const jalali = isoToJalali(previousIso);
+                reportDateLabel.textContent = jalali ? toPersianDigits(jalali) : "—";
+                if (!data.length) {
+                    reportBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">برای این تاریخ نوبتی ثبت نشده است.</td></tr>';
+                } else {
+                    const rows = data.map((entry) => {
+                        const badgeClass = `badge ${entry.status}`;
+                        const statusText = statusLabel(entry.status);
+                        const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
+                        return `<tr>
+                            <td>${toPersianDigits(entry.ticket_number)}</td>
+                            <td>${entry.name}</td>
+                            <td>${toPersianDigits(entry.phone)}</td>
+                            <td>${birthday}</td>
+                            <td><span class="${badgeClass}">${statusText}</span></td>
+                            <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
+                        </tr>`;
+                    });
+                    reportBody.innerHTML = rows.join("");
+                }
+                reportCard.classList.remove("hidden");
+                setReportStatus("گزارش روز قبل با موفقیت دریافت شد.", "success");
+            } catch (error) {
+                setReportStatus("اتصال به سرور برقرار نشد.", "error");
+                reportCard.classList.remove("hidden");
             }
         });
 
