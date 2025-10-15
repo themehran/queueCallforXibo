@@ -3,6 +3,9 @@ from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
+# Ensure models are imported so SQLModel metadata is fully populated
+from . import models  # noqa: F401
+
 
 DB_PATH = Path("data")
 DB_PATH.mkdir(exist_ok=True)

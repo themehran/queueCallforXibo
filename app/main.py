@@ -10,7 +10,7 @@ from sqlalchemy import delete, func
 from sqlmodel import Session, select
 
 from .database import get_session, init_db
-from .models import QueueDay, QueueEntry
+from .models import QueueDay, QueueEntry, QueueLoadSnapshot
 
 
 app = FastAPI(
@@ -201,6 +201,79 @@ def normalize_phone(phone: str) -> str:
     return f"+98{local}"
 
 
+SNAPSHOT_INTERVAL_MINUTES = 30
+
+
+def truncate_to_window(dt: datetime, minutes: int = SNAPSHOT_INTERVAL_MINUTES) -> datetime:
+    minute = (dt.minute // minutes) * minutes
+    return dt.replace(minute=minute, second=0, microsecond=0)
+
+
+def fetch_queue_entries(session: Session, service_day: date) -> list[QueueEntry]:
+    return session.exec(
+        select(QueueEntry)
+        .where(QueueEntry.service_date == service_day)
+        .order_by(QueueEntry.ticket_index.asc())
+    ).all()
+
+
+def summarize_queue(entries: list[QueueEntry]) -> dict[str, object]:
+    active_entry: Optional[QueueEntry] = None
+    next_entry: Optional[QueueEntry] = None
+    waiting_count = 0
+    served_count = 0
+
+    for entry in entries:
+        if entry.status == "served":
+            served_count += 1
+            continue
+        if entry.status == "active" and active_entry is None:
+            active_entry = entry
+        if entry.status == "waiting":
+            waiting_count += 1
+            if next_entry is None:
+                next_entry = entry
+
+    pending_count = len(entries) - served_count
+    return {
+        "active": active_entry,
+        "next": next_entry,
+        "waiting_count": waiting_count,
+        "served_count": served_count,
+        "pending_count": pending_count,
+    }
+
+
+def record_queue_snapshot(
+    session: Session,
+    service_day: date,
+    entries: Optional[list[QueueEntry]] = None,
+    summary: Optional[dict[str, object]] = None,
+) -> None:
+    if entries is None:
+        entries = fetch_queue_entries(session, service_day)
+    if summary is None:
+        summary = summarize_queue(entries)
+
+    window_start = truncate_to_window(datetime.utcnow())
+    snapshot = session.get(QueueLoadSnapshot, (service_day, window_start))
+    if snapshot is None:
+        snapshot = QueueLoadSnapshot(
+            service_date=service_day,
+            window_start=window_start,
+            pending_count=summary["pending_count"],
+            waiting_count=summary["waiting_count"],
+            served_count=summary["served_count"],
+        )
+        session.add(snapshot)
+    else:
+        snapshot.pending_count = summary["pending_count"]
+        snapshot.waiting_count = summary["waiting_count"]
+        snapshot.served_count = summary["served_count"]
+        snapshot.captured_at = datetime.utcnow()
+    session.commit()
+
+
 def get_active_entry(session: Session, service_day: date) -> Optional[QueueEntry]:
     return session.exec(
         select(QueueEntry)
@@ -270,6 +343,7 @@ def start_day(
     session.add(queue_day)
     session.commit()
     session.refresh(queue_day)
+    record_queue_snapshot(session, service_date)
     return QueueDayRead.model_validate(queue_day)
 
 
@@ -309,6 +383,7 @@ def create_entry(
     session.add(entry)
     session.commit()
     session.refresh(entry)
+    record_queue_snapshot(session, service_date)
     return QueueEntryRead.model_validate(entry)
 
 
@@ -344,6 +419,7 @@ def update_entry(
     session.add(entry)
     session.commit()
     session.refresh(entry)
+    record_queue_snapshot(session, entry.service_date)
     return QueueEntryRead.model_validate(entry)
 
 
@@ -353,11 +429,7 @@ def list_entries(
     session: Session = Depends(get_db_session),
 ) -> list[QueueEntryRead]:
     service_day = resolve_service_day(service_date)
-    entries = session.exec(
-        select(QueueEntry)
-        .where(QueueEntry.service_date == service_day)
-        .order_by(QueueEntry.ticket_index.asc())
-    ).all()
+    entries = fetch_queue_entries(session, service_day)
     return [QueueEntryRead.model_validate(entry) for entry in entries]
 
 
@@ -367,52 +439,41 @@ def display_payload(
     session: Session = Depends(get_db_session),
 ) -> dict[str, object]:
     service_day = resolve_service_day(service_date)
-    entries = session.exec(
-        select(QueueEntry)
-        .where(QueueEntry.service_date == service_day)
-        .order_by(QueueEntry.ticket_index.asc())
+    entries = fetch_queue_entries(session, service_day)
+    summary = summarize_queue(entries)
+    snapshots = session.exec(
+        select(QueueLoadSnapshot)
+        .where(QueueLoadSnapshot.service_date == service_day)
+        .order_by(QueueLoadSnapshot.window_start.asc())
     ).all()
-    active_entry: Optional[QueueEntry] = None
-    next_entry: Optional[QueueEntry] = None
-    waiting_count = 0
-    served_count = 0
-
-    for entry in entries:
-        if entry.status == "served":
-            served_count += 1
-            continue
-        if entry.status == "active" and active_entry is None:
-            active_entry = entry
-        if entry.status == "waiting":
-            waiting_count += 1
-            if next_entry is None:
-                next_entry = entry
-
-    pending_count = len(entries) - served_count
     return {
         "service_date": service_day.isoformat(),
         "count": len(entries),
-        "pending_count": pending_count,
-        "waiting_count": waiting_count,
-        "served_count": served_count,
+        "pending_count": summary["pending_count"],
+        "waiting_count": summary["waiting_count"],
+        "served_count": summary["served_count"],
         "active": (
             {
-                "ticket": active_entry.ticket_number,
-                "name": active_entry.name,
-                "phone": active_entry.phone,
-                "birthday": active_entry.birthday.isoformat() if active_entry.birthday else None,
+                "ticket": summary["active"].ticket_number,
+                "name": summary["active"].name,
+                "phone": summary["active"].phone,
+                "birthday": summary["active"].birthday.isoformat()
+                if summary["active"].birthday
+                else None,
             }
-            if active_entry
+            if summary["active"]
             else None
         ),
         "next": (
             {
-                "ticket": next_entry.ticket_number,
-                "name": next_entry.name,
-                "phone": next_entry.phone,
-                "birthday": next_entry.birthday.isoformat() if next_entry.birthday else None,
+                "ticket": summary["next"].ticket_number,
+                "name": summary["next"].name,
+                "phone": summary["next"].phone,
+                "birthday": summary["next"].birthday.isoformat()
+                if summary["next"].birthday
+                else None,
             }
-            if next_entry
+            if summary["next"]
             else None
         ),
         "queue": [
@@ -424,6 +485,16 @@ def display_payload(
                 "birthday": entry.birthday.isoformat() if entry.birthday else None,
             }
             for entry in entries
+        ],
+        "history": [
+            {
+                "window_start": snapshot.window_start.isoformat(),
+                "pending_count": snapshot.pending_count,
+                "waiting_count": snapshot.waiting_count,
+                "served_count": snapshot.served_count,
+                "captured_at": snapshot.captured_at.isoformat(),
+            }
+            for snapshot in snapshots
         ],
     }
 
@@ -457,6 +528,8 @@ def call_next_number(
     if served_entry:
         session.refresh(served_entry)
 
+    record_queue_snapshot(session, service_day)
+
     return QueueFlowResponse(
         active=QueueEntryRead.model_validate(next_entry) if next_entry else None,
         served=QueueEntryRead.model_validate(served_entry) if served_entry else None,
@@ -484,6 +557,8 @@ def call_previous_number(
     if active_entry:
         session.refresh(active_entry)
 
+    record_queue_snapshot(session, service_day)
+
     return QueueFlowResponse(
         active=QueueEntryRead.model_validate(previous_entry),
         served=None,
@@ -505,3 +580,27 @@ def create_entry_from_form(
 @app.get("/queue/admin", response_class=HTMLResponse)
 def admin_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("admin.html", {"request": request})
+
+
+@app.get("/queue/load-history")
+def load_history(
+    service_date: Optional[str] = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> list[dict[str, object]]:
+    service_day = resolve_service_day(service_date)
+    snapshots = session.exec(
+        select(QueueLoadSnapshot)
+        .where(QueueLoadSnapshot.service_date == service_day)
+        .order_by(QueueLoadSnapshot.window_start.asc())
+    ).all()
+    return [
+        {
+            "service_date": snapshot.service_date.isoformat(),
+            "window_start": snapshot.window_start.isoformat(),
+            "pending_count": snapshot.pending_count,
+            "waiting_count": snapshot.waiting_count,
+            "served_count": snapshot.served_count,
+            "captured_at": snapshot.captured_at.isoformat(),
+        }
+        for snapshot in snapshots
+    ]

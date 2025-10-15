@@ -24,3 +24,12 @@ class QueueEntry(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("service_date", "ticket_index", name="uq_queue_entry_per_day"),
     )
+
+
+class QueueLoadSnapshot(SQLModel, table=True):
+    service_date: date = Field(primary_key=True, nullable=False)
+    window_start: datetime = Field(primary_key=True, nullable=False)
+    pending_count: int = Field(nullable=False, default=0)
+    waiting_count: int = Field(nullable=False, default=0)
+    served_count: int = Field(nullable=False, default=0)
+    captured_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)

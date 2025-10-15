@@ -155,6 +155,9 @@
             text-align: right;
             font-size: 0.95rem;
         }
+        td.actions {
+            text-align: center;
+        }
         th {
             background: #f8fafc;
             font-weight: 700;
@@ -186,6 +189,23 @@
         .badge.served {
             background: rgba(148, 163, 184, 0.3);
             color: #475569;
+        }
+        .edit-entry {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border: none;
+            background: rgba(37, 99, 235, 0.12);
+            color: #1d4ed8;
+            padding: 0.45rem 0.9rem;
+            border-radius: 0.55rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .edit-entry:hover {
+            background: rgba(37, 99, 235, 0.2);
+            color: #1e3a8a;
         }
         .indicator-grid {
             display: grid;
