@@ -202,8 +202,16 @@ def start_day(
 ) -> QueueDayRead:
     service_date = payload.service_date or date.today()
     existing = session.get(QueueDay, service_date)
+    entries_exist = session.exec(
+        select(QueueEntry.id).where(QueueEntry.service_date == service_date)
+    ).first() is not None
     if existing and not payload.overwrite:
         raise HTTPException(status_code=400, detail="Queue for this date already started")
+    if existing and entries_exist:
+        raise HTTPException(
+            status_code=400,
+            detail="صف برای این تاریخ فعال است و امکان بازنشانی وجود ندارد",
+        )
     if existing and payload.overwrite:
         session.delete(existing)
         session.exec(delete(QueueEntry).where(QueueEntry.service_date == service_date))
