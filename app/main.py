@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import delete, func, select
 from sqlmodel import Session
 
@@ -26,15 +26,38 @@ def get_db_session() -> Session:
         yield session
 
 
+def parse_service_date_value(value: object) -> Optional[date]:
+    if value in (None, "", "null"):
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError("service_date must use YYYY-MM-DD format") from exc
+    raise ValueError("Unsupported service_date value")
+
+
 class StartDayRequest(BaseModel):
     service_date: Optional[date] = None
     overwrite: bool = False
+
+    @field_validator("service_date", mode="before")
+    @classmethod
+    def parse_service_date(cls, value: object) -> Optional[date]:
+        return parse_service_date_value(value)
 
 
 class QueueEntryCreate(BaseModel):
     name: str
     phone: str
     service_date: Optional[date] = None
+
+    @field_validator("service_date", mode="before")
+    @classmethod
+    def parse_service_date(cls, value: object) -> Optional[date]:
+        return parse_service_date_value(value)
 
 
 class QueueEntryRead(BaseModel):
@@ -64,6 +87,17 @@ def on_startup() -> None:
 @app.get("/queue/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def resolve_service_day(value: Optional[str]) -> date:
+    if value is None or value == "":
+        return date.today()
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid service_date format. Use YYYY-MM-DD."
+        ) from exc
 
 
 @app.post("/queue/start-day", response_model=QueueDayRead, status_code=status.HTTP_201_CREATED)
@@ -125,10 +159,10 @@ def create_entry(
 
 @app.get("/queue/entries", response_model=list[QueueEntryRead])
 def list_entries(
-    service_date: Optional[date] = None,
+    service_date: Optional[str] = Query(default=None),
     session: Session = Depends(get_db_session),
 ) -> list[QueueEntryRead]:
-    service_day = service_date or date.today()
+    service_day = resolve_service_day(service_date)
     entries = session.exec(
         select(QueueEntry)
         .where(QueueEntry.service_date == service_day)
@@ -139,10 +173,10 @@ def list_entries(
 
 @app.get("/queue/display")
 def display_payload(
-    service_date: Optional[date] = None,
+    service_date: Optional[str] = Query(default=None),
     session: Session = Depends(get_db_session),
 ) -> dict[str, object]:
-    service_day = service_date or date.today()
+    service_day = resolve_service_day(service_date)
     entries = session.exec(
         select(QueueEntry)
         .where(QueueEntry.service_date == service_day)
