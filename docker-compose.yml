@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  queue-app:
+    build: .
+    container_name: queue-service
+    ports:
+      - "1111:1111"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Queue Admin</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f4f4f7;
+            color: #1f2933;
+        }
+        header {
+            background: #0f172a;
+            color: #fff;
+            padding: 1.25rem 2rem;
+        }
+        main {
+            padding: 2rem;
+            max-width: 960px;
+            margin: 0 auto;
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.75rem;
+        }
+        .card {
+            background: #fff;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        input[type="text"],
+        input[type="tel"],
+        input[type="date"] {
+            width: 100%;
+            padding: 0.65rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #d1d5db;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        button {
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            padding: 0.7rem 1.25rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease-in-out;
+        }
+        button.secondary {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button.secondary:hover {
+            background: #cbd5f5;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+        }
+        .status {
+            margin-top: 0.75rem;
+            min-height: 1.25rem;
+            font-size: 0.95rem;
+        }
+        .status.error {
+            color: #dc2626;
+        }
+        .status.success {
+            color: #15803d;
+        }
+        @media (max-width: 640px) {
+            main {
+                padding: 1rem;
+            }
+            th, td {
+                padding: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Queue Control Panel</h1>
+    </header>
+    <main>
+        <section class="card">
+            <h2>Queue Session</h2>
+            <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: end;">
+                <div>
+                    <label for="service-date">Service Date</label>
+                    <input type="date" id="service-date">
+                </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <button id="start-day">Start New Day</button>
+                    <button id="refresh" class="secondary">Refresh List</button>
+                </div>
+            </div>
+            <div id="day-status" class="status"></div>
+        </section>
+
+        <section class="card">
+            <h2>Register Caller</h2>
+            <form id="entry-form">
+                <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                    <div>
+                        <label for="name">Full Name</label>
+                        <input type="text" id="name" name="name" required placeholder="Visitor name">
+                    </div>
+                    <div>
+                        <label for="phone">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" required placeholder="+1 555 0100">
+                    </div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <button type="submit">Issue Ticket</button>
+                </div>
+            </form>
+            <div id="entry-status" class="status"></div>
+        </section>
+
+        <section class="card">
+            <h2>Today's Queue</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ticket</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="queue-body">
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 1.5rem;">No entries yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script>
+        const serviceDateInput = document.getElementById("service-date");
+        const startDayButton = document.getElementById("start-day");
+        const refreshButton = document.getElementById("refresh");
+        const dayStatus = document.getElementById("day-status");
+        const entryForm = document.getElementById("entry-form");
+        const entryStatus = document.getElementById("entry-status");
+        const queueBody = document.getElementById("queue-body");
+
+        const todayIso = new Date().toISOString().slice(0, 10);
+        serviceDateInput.value = todayIso;
+
+        const setStatus = (element, message, type = "") => {
+            element.textContent = message;
+            element.className = `status ${type}`;
+            if (message) {
+                setTimeout(() => { element.textContent = ""; element.className = "status"; }, 5500);
+            }
+        };
+
+        const fetchEntries = async () => {
+            const date = serviceDateInput.value || todayIso;
+            const response = await fetch(`/queue/entries?service_date=${date}`);
+            if (!response.ok) {
+                setStatus(dayStatus, "Failed to load entries.", "error");
+                return;
+            }
+            const data = await response.json();
+            renderEntries(data);
+        };
+
+        const renderEntries = (entries) => {
+            if (!entries.length) {
+                queueBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 1.5rem;">No entries yet.</td></tr>';
+                return;
+            }
+            const rows = entries.map(entry => {
+                const created = new Date(entry.created_at || new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                return `<tr>
+                    <td>${entry.ticket_number}</td>
+                    <td>${entry.name}</td>
+                    <td>${entry.phone}</td>
+                    <td>${created}</td>
+                </tr>`;
+            });
+            queueBody.innerHTML = rows.join("");
+        };
+
+        startDayButton.addEventListener("click", async () => {
+            const date = serviceDateInput.value || todayIso;
+            if (!confirm(`Start a new queue for ${date}? This will reset today's numbers.`)) {
+                return;
+            }
+            try {
+                const response = await fetch("/queue/start-day", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service_date: date, overwrite: true }),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    setStatus(dayStatus, err.detail || "Failed to start day.", "error");
+                    return;
+                }
+                setStatus(dayStatus, `Queue started for ${date}.`, "success");
+                await fetchEntries();
+            } catch (error) {
+                setStatus(dayStatus, "Unable to reach server.", "error");
+            }
+        });
+
+        refreshButton.addEventListener("click", fetchEntries);
+
+        entryForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const formData = new FormData(entryForm);
+            const payload = {
+                name: formData.get("name")?.trim(),
+                phone: formData.get("phone")?.trim(),
+                service_date: serviceDateInput.value || todayIso,
+            };
+            if (!payload.name || !payload.phone) {
+                setStatus(entryStatus, "Name and phone are required.", "error");
+                return;
+            }
+            try {
+                const response = await fetch("/queue/entries", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const err = await response.json();
+                    setStatus(entryStatus, err.detail || "Ticket creation failed.", "error");
+                    return;
+                }
+                entryForm.reset();
+                setStatus(entryStatus, "Ticket issued.", "success");
+                await fetchEntries();
+            } catch (error) {
+                setStatus(entryStatus, "Unable to reach server.", "error");
+            }
+        });
+
+        fetchEntries();
+    </script>
+</body>
+</html>
