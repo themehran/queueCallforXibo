@@ -810,6 +810,26 @@
         const todayIso = new Date().toISOString().slice(0, 10);
         const todayJalali = isoToJalali(todayIso);
         serviceDateInput.value = toPersianDigits(todayJalali);
+        const yesterdayIso = getPreviousDayIso(todayIso);
+        if (reportDateInput) {
+            const reportDefault = yesterdayIso ? isoToJalali(yesterdayIso) : todayJalali;
+            if (reportDefault) {
+                reportDateInput.value = toPersianDigits(reportDefault);
+            }
+        }
+        let latestEntries = [];
+        let latestServiceDateIso = todayIso;
+        let currentEditId = null;
+
+        attachJalaliPicker(birthdayInput);
+        attachJalaliPicker(editBirthdayInput);
+        attachJalaliPicker(reportDateInput, {
+            onSelect: async ({ iso }) => {
+                if (iso) {
+                    await loadReport(iso);
+                }
+            },
+        });
 
         const setStatus = (element, message, type = "") => {
             element.textContent = message;
@@ -890,9 +910,10 @@
             }
         };
 
-        const renderEntries = (entries) => {
+        const renderEntries = (entries, serviceDateIso) => {
+            const isTodayView = serviceDateIso === todayIso;
             if (!entries.length) {
-                queueBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td></tr>';
+                queueBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.5rem;">هنوز نوبتی ثبت نشده است.</td></tr>';
                 renderIndicators([]);
                 startDayButton.disabled = false;
                 return;
@@ -902,6 +923,10 @@
                 const badgeClass = `badge ${entry.status}`;
                 const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
                 const statusText = statusLabel(entry.status);
+                const editable = entry.service_date === todayIso;
+                const actionCell = editable
+                    ? `<button type="button" class="quiet edit-entry" data-entry-id="${entry.id}">ویرایش</button>`
+                    : "—";
                 return `<tr class="${rowClass}">
                     <td>${toPersianDigits(entry.ticket_number)}</td>
                     <td>${entry.name}</td>
@@ -909,11 +934,12 @@
                     <td>${birthday}</td>
                     <td><span class="${badgeClass}">${statusText}</span></td>
                     <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
+                    <td>${actionCell}</td>
                 </tr>`;
             });
             queueBody.innerHTML = rows.join("");
             renderIndicators(entries);
-            startDayButton.disabled = entries.length > 0;
+            startDayButton.disabled = isTodayView && entries.length > 0;
         };
 
         const fetchEntries = async () => {
@@ -931,10 +957,96 @@
                     return;
                 }
                 const data = await response.json();
-                renderEntries(data);
+                latestEntries = data;
+                latestServiceDateIso = isoDate;
+                renderEntries(data, isoDate);
             } catch (error) {
                 setStatus(dayStatus, "اتصال به سرور برقرار نشد.", "error");
             }
+        };
+
+        const loadReport = async (isoOverride) => {
+            if (!reportDateInput) {
+                return;
+            }
+            let isoDate = isoOverride;
+            if (!isoDate) {
+                const raw = reportDateInput.value.trim();
+                if (!raw) {
+                    setReportStatus("تاریخ گزارش را وارد کنید.", "error");
+                    reportCard.classList.remove("hidden");
+                    return;
+                }
+                isoDate = jalaliToIso(raw);
+            }
+            if (!isoDate) {
+                setReportStatus("تاریخ گزارش معتبر نیست.", "error");
+                reportCard.classList.remove("hidden");
+                return;
+            }
+            try {
+                const response = await fetch(`/queue/entries?service_date=${isoDate}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    setReportStatus(err.detail || "خطا در دریافت گزارش", "error");
+                    reportCard.classList.remove("hidden");
+                    return;
+                }
+                const data = await response.json();
+                const jalali = isoToJalali(isoDate);
+                reportDateLabel.textContent = jalali ? toPersianDigits(jalali) : "—";
+                if (!data.length) {
+                    reportBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">برای این تاریخ نوبتی ثبت نشده است.</td></tr>';
+                } else {
+                    const rows = data.map((entry) => {
+                        const badgeClass = `badge ${entry.status}`;
+                        const statusText = statusLabel(entry.status);
+                        const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
+                        return `<tr>
+                            <td>${toPersianDigits(entry.ticket_number)}</td>
+                            <td>${entry.name}</td>
+                            <td>${toPersianDigits(entry.phone)}</td>
+                            <td>${birthday}</td>
+                            <td><span class="${badgeClass}">${statusText}</span></td>
+                            <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
+                        </tr>`;
+                    });
+                    reportBody.innerHTML = rows.join("");
+                }
+                reportCard.classList.remove("hidden");
+                setReportStatus("گزارش با موفقیت دریافت شد.", "success");
+            } catch (error) {
+                setReportStatus("اتصال به سرور برقرار نشد.", "error");
+                reportCard.classList.remove("hidden");
+            }
+        };
+
+        const resetEditStatus = () => {
+            editStatus.textContent = "";
+            editStatus.className = "status";
+        };
+
+        const openEditModal = (entry) => {
+            currentEditId = entry.id;
+            editNameInput.value = entry.name;
+            editPhoneInput.value = toPersianDigits(entry.phone);
+            if (entry.birthday) {
+                const jalali = isoToJalali(entry.birthday);
+                editBirthdayInput.value = jalali ? toPersianDigits(jalali) : "";
+            } else {
+                editBirthdayInput.value = "";
+            }
+            resetEditStatus();
+            editModal.classList.remove("hidden");
+            editNameInput.focus();
+        };
+
+        const closeEditModal = () => {
+            currentEditId = null;
+            editForm.reset();
+            editBirthdayInput.value = "";
+            resetEditStatus();
+            editModal.classList.add("hidden");
         };
 
         const confirmStartDay = (jalaliDate) => window.confirm(`آیا از شروع روز جدید برای ${jalaliDate} مطمئن هستید؟ این کار نوبت‌های ثبت‌شده را برای این تاریخ حذف می‌کند.`);
@@ -991,53 +1103,20 @@
             }
         });
 
-        previousReportButton.addEventListener("click", async () => {
-            const isoDate = getServiceDateIso();
-            if (!isoDate) {
-                return;
-            }
-            const previousIso = getPreviousDayIso(isoDate);
-            if (!previousIso) {
-                setReportStatus("تاریخ قبلی معتبر نیست.", "error");
-                reportCard.classList.remove("hidden");
-                return;
-            }
-            try {
-                const response = await fetch(`/queue/entries?service_date=${previousIso}`);
-                if (!response.ok) {
-                    const err = await response.json();
-                    setReportStatus(err.detail || "خطا در دریافت گزارش روز قبل", "error");
-                    reportCard.classList.remove("hidden");
-                    return;
+        if (loadReportButton) {
+            loadReportButton.addEventListener("click", async () => {
+                await loadReport();
+            });
+        }
+
+        if (reportDateInput) {
+            reportDateInput.addEventListener("keydown", async (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    await loadReport();
                 }
-                const data = await response.json();
-                const jalali = isoToJalali(previousIso);
-                reportDateLabel.textContent = jalali ? toPersianDigits(jalali) : "—";
-                if (!data.length) {
-                    reportBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">برای این تاریخ نوبتی ثبت نشده است.</td></tr>';
-                } else {
-                    const rows = data.map((entry) => {
-                        const badgeClass = `badge ${entry.status}`;
-                        const statusText = statusLabel(entry.status);
-                        const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
-                        return `<tr>
-                            <td>${toPersianDigits(entry.ticket_number)}</td>
-                            <td>${entry.name}</td>
-                            <td>${toPersianDigits(entry.phone)}</td>
-                            <td>${birthday}</td>
-                            <td><span class="${badgeClass}">${statusText}</span></td>
-                            <td>${toPersianDigits(toPersianTime(entry.created_at))}</td>
-                        </tr>`;
-                    });
-                    reportBody.innerHTML = rows.join("");
-                }
-                reportCard.classList.remove("hidden");
-                setReportStatus("گزارش روز قبل با موفقیت دریافت شد.", "success");
-            } catch (error) {
-                setReportStatus("اتصال به سرور برقرار نشد.", "error");
-                reportCard.classList.remove("hidden");
-            }
-        });
+            });
+        }
 
         callPreviousButton.addEventListener("click", async () => {
             const isoDate = getServiceDateIso();
@@ -1087,6 +1166,13 @@
             }
         });
 
+        editBirthdayInput.addEventListener("blur", () => {
+            const iso = jalaliToIso(editBirthdayInput.value);
+            if (iso) {
+                editBirthdayInput.value = toPersianDigits(isoToJalali(iso));
+            }
+        });
+
         entryForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const formData = new FormData(entryForm);
@@ -1127,6 +1213,111 @@
                 await fetchEntries();
             } catch (error) {
                 setStatus(entryStatus, "اتصال به سرور برقرار نشد.", "error");
+            }
+        });
+
+        queueBody.addEventListener("click", (event) => {
+            const button = event.target.closest(".edit-entry");
+            if (!button) {
+                return;
+            }
+            const entryId = Number(button.dataset.entryId);
+            if (!entryId) {
+                return;
+            }
+            const entry = latestEntries.find((item) => item.id === entryId);
+            if (!entry) {
+                setStatus(dayStatus, "نوبت مورد نظر یافت نشد.", "error");
+                return;
+            }
+            openEditModal(entry);
+        });
+
+        cancelEditButton.addEventListener("click", () => {
+            closeEditModal();
+        });
+
+        editModal.addEventListener("mousedown", (event) => {
+            if (event.target === editModal) {
+                closeEditModal();
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !editModal.classList.contains("hidden")) {
+                closeEditModal();
+            }
+        });
+
+        editForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!currentEditId) {
+                return;
+            }
+            const original = latestEntries.find((item) => item.id === currentEditId);
+            if (!original) {
+                setStatus(dayStatus, "نوبت مورد نظر یافت نشد.", "error");
+                closeEditModal();
+                return;
+            }
+
+            const updates = {};
+            const nameValue = editNameInput.value.trim();
+            if (!nameValue) {
+                editStatus.textContent = "نام نمی‌تواند خالی باشد";
+                editStatus.className = "status error";
+                return;
+            }
+            if (nameValue !== original.name) {
+                updates.name = nameValue;
+            }
+
+            const phoneValue = normalizeDigits(editPhoneInput.value || "").replace(/[\s\-()]+/g, "");
+            if (!phoneValue) {
+                editStatus.textContent = "شماره تماس نمی‌تواند خالی باشد";
+                editStatus.className = "status error";
+                return;
+            }
+            const originalPhone = normalizeDigits(original.phone || "");
+            if (phoneValue !== originalPhone) {
+                updates.phone = phoneValue;
+            }
+
+            const birthdayRaw = editBirthdayInput.value.trim();
+            const birthdayIso = birthdayRaw ? jalaliToIso(birthdayRaw) : null;
+            if (birthdayRaw && !birthdayIso) {
+                editStatus.textContent = "تاریخ تولد وارد شده معتبر نیست";
+                editStatus.className = "status error";
+                return;
+            }
+            if (birthdayIso !== original.birthday) {
+                updates.birthday = birthdayIso;
+            }
+
+            if (Object.keys(updates).length === 0) {
+                editStatus.textContent = "تغییری برای ذخیره وجود ندارد";
+                editStatus.className = "status";
+                return;
+            }
+
+            try {
+                const response = await fetch(`/queue/entries/${currentEditId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updates),
+                });
+                const resultBody = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    editStatus.textContent = resultBody.detail || "خطا در ذخیره تغییرات";
+                    editStatus.className = "status error";
+                    return;
+                }
+                closeEditModal();
+                setStatus(dayStatus, "اطلاعات نوبت با موفقیت ویرایش شد.", "success");
+                await fetchEntries();
+            } catch (error) {
+                editStatus.textContent = "اتصال به سرور برقرار نشد.";
+                editStatus.className = "status error";
             }
         });
 
