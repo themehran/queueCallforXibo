@@ -3,7 +3,7 @@ import re
 from typing import Optional
 
 from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import delete, func
@@ -581,7 +581,7 @@ def create_entry_from_form(
 def xibo_dataset(
     service_date: Optional[str] = Query(default=None),
     session: Session = Depends(get_db_session),
-) -> list[dict[str, object]]:
+) -> dict[str, object]:
     """
     XIBO DataSet endpoint for displaying queue information on digital signage.
     Returns current serving and next serving information as a list suitable for XIBO DataSets.
@@ -644,7 +644,7 @@ def xibo_dataset(
             "served_count": summary["served_count"],
         })
 
-    return result
+    return {"data": result}
 
 
 @app.get("/queue/xibo-simple")
@@ -669,15 +669,75 @@ def xibo_simple(
     summary = summarize_queue(entries)
 
     return {
-        "current_number": summary["active"].ticket_number if summary["active"] else "—",
-        "current_name": summary["active"].name if summary["active"] else "در انتظار فراخوانی",
-        "next_number": summary["next"].ticket_number if summary["next"] else "—",
-        "next_name": summary["next"].name if summary["next"] else "صف خالی است",
-        "waiting_count": summary["waiting_count"],
-        "served_count": summary["served_count"],
-        "pending_count": summary["pending_count"],
-        "total_count": len(entries),
+        "data": {
+            "current_number": summary["active"].ticket_number if summary["active"] else "—",
+            "current_name": summary["active"].name if summary["active"] else "در انتظار فراخوانی",
+            "next_number": summary["next"].ticket_number if summary["next"] else "—",
+            "next_name": summary["next"].name if summary["next"] else "صف خالی است",
+            "waiting_count": summary["waiting_count"],
+            "served_count": summary["served_count"],
+            "pending_count": summary["pending_count"],
+            "total_count": len(entries),
+        }
     }
+
+
+@app.get("/queue/rss")
+def queue_rss_feed(
+    service_date: Optional[str] = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> Response:
+    """
+    RSS feed endpoint for Xibo RSS Ticker widget.
+
+    Returns real-time queue information in RSS 2.0 format.
+    Configure your Xibo RSS Ticker widget to poll this endpoint
+    at regular intervals (e.g., every 10-30 seconds) for automatic updates.
+
+    RSS items include:
+    - Current serving ticket and name
+    - Next serving ticket and name
+    - Queue statistics (waiting count, served count)
+    """
+    service_day = resolve_service_day(service_date)
+    entries = fetch_queue_entries(session, service_day)
+    summary = summarize_queue(entries)
+
+    # Build current serving info
+    current_ticket = summary["active"].ticket_number if summary["active"] else "—"
+    current_name = summary["active"].name if summary["active"] else "در انتظار فراخوانی"
+
+    # Build next serving info
+    next_ticket = summary["next"].ticket_number if summary["next"] else "—"
+    next_name = summary["next"].name if summary["next"] else "صف خالی است"
+
+    # Build RSS XML with proper escaping
+    rss_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>وضعیت صف</title>
+    <description>اطلاعات لحظه‌ای صف</description>
+    <link>http://localhost/queue</link>
+    <lastBuildDate>{datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</lastBuildDate>
+    <item>
+      <title>در حال خدمت: {current_ticket}</title>
+      <description>{current_name}</description>
+      <guid isPermaLink="false">current-{service_day.isoformat()}-{current_ticket}</guid>
+    </item>
+    <item>
+      <title>نفر بعدی: {next_ticket}</title>
+      <description>{next_name}</description>
+      <guid isPermaLink="false">next-{service_day.isoformat()}-{next_ticket}</guid>
+    </item>
+    <item>
+      <title>آمار صف</title>
+      <description>در انتظار: {summary["waiting_count"]} | خدمت شده: {summary["served_count"]} | کل: {summary["pending_count"]}</description>
+      <guid isPermaLink="false">stats-{service_day.isoformat()}-{datetime.utcnow().timestamp()}</guid>
+    </item>
+  </channel>
+</rss>"""
+
+    return Response(content=rss_content, media_type="application/rss+xml")
 
 
 @app.get("/queue/admin", response_class=HTMLResponse)
