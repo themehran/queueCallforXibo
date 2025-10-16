@@ -577,6 +577,109 @@ def create_entry_from_form(
     return create_entry(payload, session)
 
 
+@app.get("/queue/xibo-dataset")
+def xibo_dataset(
+    service_date: Optional[str] = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> list[dict[str, object]]:
+    """
+    XIBO DataSet endpoint for displaying queue information on digital signage.
+    Returns current serving and next serving information as a list suitable for XIBO DataSets.
+
+    Each row contains:
+    - row_type: "current" or "next"
+    - ticket_number: Queue ticket number (e.g., "001")
+    - name: Person's name
+    - status_label: Display label in Persian
+    """
+    service_day = resolve_service_day(service_date)
+    entries = fetch_queue_entries(session, service_day)
+    summary = summarize_queue(entries)
+
+    result = []
+
+    # Current serving
+    if summary["active"]:
+        active = summary["active"]
+        result.append({
+            "row_type": "current",
+            "ticket_number": active.ticket_number,
+            "name": active.name,
+            "phone": active.phone,
+            "status_label": "در حال خدمت",
+            "waiting_count": summary["waiting_count"],
+            "served_count": summary["served_count"],
+        })
+    else:
+        result.append({
+            "row_type": "current",
+            "ticket_number": "—",
+            "name": "در انتظار فراخوانی",
+            "phone": "",
+            "status_label": "—",
+            "waiting_count": summary["waiting_count"],
+            "served_count": summary["served_count"],
+        })
+
+    # Next serving
+    if summary["next"]:
+        next_entry = summary["next"]
+        result.append({
+            "row_type": "next",
+            "ticket_number": next_entry.ticket_number,
+            "name": next_entry.name,
+            "phone": next_entry.phone,
+            "status_label": "نفر بعدی",
+            "waiting_count": summary["waiting_count"],
+            "served_count": summary["served_count"],
+        })
+    else:
+        result.append({
+            "row_type": "next",
+            "ticket_number": "—",
+            "name": "صف خالی است",
+            "phone": "",
+            "status_label": "—",
+            "waiting_count": summary["waiting_count"],
+            "served_count": summary["served_count"],
+        })
+
+    return result
+
+
+@app.get("/queue/xibo-simple")
+def xibo_simple(
+    service_date: Optional[str] = Query(default=None),
+    session: Session = Depends(get_db_session),
+) -> dict[str, object]:
+    """
+    Simplified XIBO endpoint returning current and next serving as single object.
+    Perfect for simple XIBO ticker displays.
+
+    Returns:
+    - current_number: Current ticket number
+    - current_name: Current person name
+    - next_number: Next ticket number
+    - next_name: Next person name
+    - waiting_count: Number of people waiting
+    - served_count: Number of people served
+    """
+    service_day = resolve_service_day(service_date)
+    entries = fetch_queue_entries(session, service_day)
+    summary = summarize_queue(entries)
+
+    return {
+        "current_number": summary["active"].ticket_number if summary["active"] else "—",
+        "current_name": summary["active"].name if summary["active"] else "در انتظار فراخوانی",
+        "next_number": summary["next"].ticket_number if summary["next"] else "—",
+        "next_name": summary["next"].name if summary["next"] else "صف خالی است",
+        "waiting_count": summary["waiting_count"],
+        "served_count": summary["served_count"],
+        "pending_count": summary["pending_count"],
+        "total_count": len(entries),
+    }
+
+
 @app.get("/queue/admin", response_class=HTMLResponse)
 def admin_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("admin.html", {"request": request})
