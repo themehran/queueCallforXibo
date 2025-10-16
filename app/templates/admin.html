@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>پنل مدیریت نوبت</title>
+    <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css">
     <style>
         :root {
             color-scheme: light dark;
@@ -252,76 +253,6 @@
         .picker-wrapper {
             position: relative;
         }
-        .jalali-picker {
-            position: absolute;
-            inset-inline-start: 0;
-            top: calc(100% + 0.5rem);
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 0.9rem;
-            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.15);
-            width: 18.5rem;
-            padding: 0.75rem 0.85rem 0.9rem;
-            z-index: 50;
-        }
-        .jalali-picker.hidden {
-            display: none;
-        }
-        .jalali-picker .jp-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.75rem;
-        }
-        .jalali-picker .jp-title {
-            font-weight: 700;
-            font-size: 1rem;
-        }
-        .jalali-picker button.picker-nav {
-            background: transparent;
-            color: #2563eb;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.5rem;
-            box-shadow: none;
-        }
-        .jalali-picker button.picker-nav:hover {
-            background: rgba(37, 99, 235, 0.12);
-        }
-        .jalali-picker .jp-week,
-        .jalali-picker .jp-days {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 0.35rem;
-            text-align: center;
-        }
-        .jalali-picker .jp-week {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #475569;
-            margin-bottom: 0.25rem;
-        }
-        .jalali-picker .jp-day {
-            font-size: 0.95rem;
-            font-weight: 500;
-            padding: 0.45rem 0;
-            border-radius: 0.55rem;
-            cursor: pointer;
-            transition: background 0.15s ease;
-        }
-        .jalali-picker .jp-day:hover {
-            background: rgba(37, 99, 235, 0.15);
-        }
-        .jalali-picker .jp-day.disabled {
-            opacity: 0;
-            pointer-events: none;
-        }
-        .jalali-picker .jp-day.selected {
-            background: #2563eb;
-            color: #fff;
-        }
-        .jalali-picker .jp-day.today {
-            border: 1px solid rgba(37, 99, 235, 0.65);
-        }
         .compact-input {
             width: 175px;
             padding: 0.65rem 0.75rem;
@@ -519,6 +450,9 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+    <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
     <script>
         const persianDigits = ["۰","۱","۲","۳","۴","۵","۶","۷","۸","۹"];
 
@@ -646,194 +580,58 @@
             return `${prevYear}-${prevMonth}-${prevDay}`;
         }
 
-        const jalaliMonthNames = [
-            "فروردین",
-            "اردیبهشت",
-            "خرداد",
-            "تیر",
-            "مرداد",
-            "شهریور",
-            "مهر",
-            "آبان",
-            "آذر",
-            "دی",
-            "بهمن",
-            "اسفند",
-        ];
-        const jalaliWeekDays = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
-
-        const normalizeJalaliDigits = (value) => normalizeDigits(value ?? "").replace(/[./]/g, "-");
-
-        const parseJalaliString = (value) => {
-            const normalized = normalizeJalaliDigits(value);
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-                return null;
-            }
-            return normalized.split("-").map(Number);
-        };
-
-        const isJalaliLeapYear = (jy) => {
-            const mod = ((jy - (jy > 0 ? 474 : 473)) % 2820) + 2820;
-            return ((mod + 38) * 682) % 2816 < 682;
-        };
-
-        const jalaliMonthLength = (jy, jm) => {
-            if (jm >= 1 && jm <= 6) return 31;
-            if (jm >= 7 && jm <= 11) return 30;
-            return isJalaliLeapYear(jy) ? 30 : 29;
-        };
-
+        // Initialize Persian DatePicker with month/year selector
         const attachJalaliPicker = (input, { onSelect } = {}) => {
             if (!input) return;
             if (input.dataset.pickerAttached === "true") return;
             input.dataset.pickerAttached = "true";
 
-            const wrapper = input.closest(".picker-wrapper") || input.parentElement;
-            if (!wrapper) return;
-            wrapper.classList.add("picker-wrapper");
-
-            const picker = document.createElement("div");
-            picker.className = "jalali-picker hidden";
-
-            const header = document.createElement("div");
-            header.className = "jp-header";
-
-            const prevButton = document.createElement("button");
-            prevButton.type = "button";
-            prevButton.className = "picker-nav";
-            prevButton.textContent = "‹";
-
-            const title = document.createElement("div");
-            title.className = "jp-title";
-
-            const nextButton = document.createElement("button");
-            nextButton.type = "button";
-            nextButton.className = "picker-nav";
-            nextButton.textContent = "›";
-
-            header.append(prevButton, title, nextButton);
-
-            const weekRow = document.createElement("div");
-            weekRow.className = "jp-week";
-            jalaliWeekDays.forEach((day) => {
-                const span = document.createElement("span");
-                span.textContent = day;
-                weekRow.appendChild(span);
-            });
-
-            const daysGrid = document.createElement("div");
-            daysGrid.className = "jp-days";
-
-            picker.append(header, weekRow, daysGrid);
-            wrapper.appendChild(picker);
-
-            let [selectedJy, selectedJm, selectedJd] = (() => {
-                const parsed = parseJalaliString(input.value);
-                if (parsed) return parsed;
-                const jalaliToday = isoToJalali(todayIso);
-                return jalaliToday ? jalaliToday.split("-").map(Number) : [1403, 1, 1];
-            })();
-            let currentJy = selectedJy;
-            let currentJm = selectedJm;
-
-            const updateTitle = () => {
-                title.textContent = `${toPersianDigits(currentJy)} ${jalaliMonthNames[currentJm - 1]}`;
-            };
-
-            const renderDays = () => {
-                daysGrid.innerHTML = "";
-                const monthLength = jalaliMonthLength(currentJy, currentJm);
-                const [gYear, gMonth, gDay] = jalaliToGregorian(currentJy, currentJm, 1);
-                const firstWeekDay = (new Date(Date.UTC(gYear, gMonth - 1, gDay)).getUTCDay() + 1) % 7;
-
-                for (let i = 0; i < firstWeekDay; i += 1) {
-                    const filler = document.createElement("div");
-                    filler.className = "jp-day disabled";
-                    daysGrid.appendChild(filler);
-                }
-
-                for (let day = 1; day <= monthLength; day += 1) {
-                    const cell = document.createElement("div");
-                    cell.className = "jp-day";
-                    cell.textContent = toPersianDigits(day);
-                    if (selectedJy === currentJy && selectedJm === currentJm && selectedJd === day) {
-                        cell.classList.add("selected");
+            $(input).persianDatepicker({
+                format: 'YYYY-MM-DD',
+                initialValue: false,
+                autoClose: true,
+                calendar: {
+                    persian: {
+                        locale: 'fa',
+                        showHint: true,
+                        leapYearMode: 'algorithmic'
                     }
-                    const jalaliToday = isoToJalali(todayIso);
-                    if (jalaliToday) {
-                        const [ty, tm, td] = jalaliToday.split("-").map(Number);
-                        if (ty === currentJy && tm === currentJm && td === day) {
-                            cell.classList.add("today");
+                },
+                navigator: {
+                    enabled: true,
+                    scroll: {
+                        enabled: true
+                    },
+                    text: {
+                        btnNextText: '>',
+                        btnPrevText: '<'
+                    }
+                },
+                toolbox: {
+                    enabled: true,
+                    calendarSwitch: {
+                        enabled: false
+                    },
+                    todayButton: {
+                        enabled: true,
+                        text: {
+                            fa: "امروز"
+                        }
+                    },
+                    submitButton: {
+                        enabled: true,
+                        text: {
+                            fa: "تایید"
                         }
                     }
-                    cell.addEventListener("click", () => {
-                        selectedJy = currentJy;
-                        selectedJm = currentJm;
-                        selectedJd = day;
-                        const jalaliString = `${selectedJy}-${pad(selectedJm)}-${pad(selectedJd)}`;
-                        input.value = toPersianDigits(jalaliString);
-                        if (typeof onSelect === "function") {
-                            const iso = jalaliToIso(jalaliString);
-                            onSelect({ jalali: jalaliString, iso });
-                        }
-                        hidePicker();
-                    });
-                    daysGrid.appendChild(cell);
-                }
-            };
-
-            const showPicker = () => {
-                const parsed = parseJalaliString(input.value);
-                if (parsed) {
-                    [selectedJy, selectedJm, selectedJd] = parsed;
-                    currentJy = selectedJy;
-                    currentJm = selectedJm;
-                }
-                updateTitle();
-                renderDays();
-                picker.classList.remove("hidden");
-            };
-
-            const hidePicker = () => {
-                picker.classList.add("hidden");
-            };
-
-            prevButton.addEventListener("click", () => {
-                currentJm -= 1;
-                if (currentJm < 1) {
-                    currentJm = 12;
-                    currentJy -= 1;
-                }
-                updateTitle();
-                renderDays();
-            });
-
-            nextButton.addEventListener("click", () => {
-                currentJm += 1;
-                if (currentJm > 12) {
-                    currentJm = 1;
-                    currentJy += 1;
-                }
-                updateTitle();
-                renderDays();
-            });
-
-            const handleDocumentClick = (event) => {
-                if (picker.classList.contains("hidden")) {
-                    return;
-                }
-                if (picker.contains(event.target) || wrapper.contains(event.target)) {
-                    return;
-                }
-                hidePicker();
-            };
-
-            document.addEventListener("mousedown", handleDocumentClick);
-            input.addEventListener("focus", showPicker);
-            input.addEventListener("click", showPicker);
-            input.addEventListener("keydown", (event) => {
-                if (event.key === "Escape") {
-                    hidePicker();
+                },
+                onSelect: function(unix) {
+                    if (typeof onSelect === "function" && unix) {
+                        const date = new Date(unix);
+                        const iso = date.toISOString().slice(0, 10);
+                        const jalali = isoToJalali(iso);
+                        onSelect({ jalali, iso });
+                    }
                 }
             });
         };
@@ -867,18 +665,19 @@
 
         const todayIso = new Date().toISOString().slice(0, 10);
         const todayJalali = isoToJalali(todayIso);
-        serviceDateInput.value = toPersianDigits(todayJalali);
+        serviceDateInput.value = todayJalali;  // Library handles Persian digits
         const yesterdayIso = getPreviousDayIso(todayIso);
         if (reportDateInput) {
             const reportDefault = yesterdayIso ? isoToJalali(yesterdayIso) : todayJalali;
             if (reportDefault) {
-                reportDateInput.value = toPersianDigits(reportDefault);
+                reportDateInput.value = reportDefault;  // Library handles Persian digits
             }
         }
         let latestEntries = [];
         let latestServiceDateIso = todayIso;
         let currentEditId = null;
 
+        attachJalaliPicker(serviceDateInput);
         attachJalaliPicker(birthdayInput);
         attachJalaliPicker(editBirthdayInput);
         attachJalaliPicker(reportDateInput, {
@@ -1004,7 +803,8 @@
                 const badgeClass = `badge ${entry.status}`;
                 const birthday = entry.birthday ? toPersianDate(entry.birthday) : "—";
                 const statusText = statusLabel(entry.status);
-                const editable = entry.service_date === serviceDateIso && isTodayView;
+                // Always allow editing for today's entries
+                const editable = entry.service_date === todayIso;
                 const actionCell = editable
                     ? `<button type="button" class="edit-entry" data-entry-id="${entry.id}">ویرایش</button>`
                     : "—";
@@ -1113,7 +913,7 @@
             editPhoneInput.value = toPersianDigits(entry.phone);
             if (entry.birthday) {
                 const jalali = isoToJalali(entry.birthday);
-                editBirthdayInput.value = jalali ? toPersianDigits(jalali) : "";
+                editBirthdayInput.value = jalali || "";  // Library handles Persian digits
             } else {
                 editBirthdayInput.value = "";
             }
@@ -1225,14 +1025,6 @@
 
         refreshButton.addEventListener("click", fetchEntries);
 
-        serviceDateInput.addEventListener("blur", () => {
-            const iso = jalaliToIso(serviceDateInput.value);
-            if (iso) {
-                const jalali = isoToJalali(iso);
-                serviceDateInput.value = toPersianDigits(jalali);
-            }
-        });
-
         const parseBirthdayIso = () => {
             const value = birthdayInput.value.trim();
             if (!value) return null;
@@ -1240,19 +1032,7 @@
             return iso;
         };
 
-        birthdayInput.addEventListener("blur", () => {
-            const iso = jalaliToIso(birthdayInput.value);
-            if (iso) {
-                birthdayInput.value = toPersianDigits(isoToJalali(iso));
-            }
-        });
-
-        editBirthdayInput.addEventListener("blur", () => {
-            const iso = jalaliToIso(editBirthdayInput.value);
-            if (iso) {
-                editBirthdayInput.value = toPersianDigits(isoToJalali(iso));
-            }
-        });
+        // Blur handlers removed - persian-datepicker handles formatting
 
         entryForm.addEventListener("submit", async (event) => {
             event.preventDefault();
